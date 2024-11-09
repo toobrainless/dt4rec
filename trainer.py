@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from torch.nn import functional as func
 from tqdm import tqdm
+import time
 
 from utils import calc_metrics
 
@@ -131,7 +132,10 @@ class Trainer:
         Run training loop
         """
         for epoch in range(self.epochs):
+            start = time.time()
             self._train_epoch(epoch)
+            end = time.time()
             if self.validate_dataloader is not None:
                 self._evaluation_epoch()
+        self.metrics[-1]["epoch_time"] = end - start
         return self.metrics

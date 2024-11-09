@@ -26,6 +26,8 @@ def main():
     exp_name = argv[1]
     use_svd_embs = argv[2] == "True"
     learn_svd_embs = argv[3] == "True"
+    use_old_attention = argv[4] == "True"
+    emb_128 = argv[5] == "True"
 
     trajectory_len = 32
 
@@ -68,12 +70,15 @@ def main():
     #
 
     # create model
+    emb_size = 128 if emb_128 else 64
     mconf = GPTConfig(
         user_num=user_num,
         item_num=item_num,
         vocab_size=item_num + 1,
         block_size=trajectory_len * 3,
         max_timestep=item_num,
+        n_embd=emb_size,
+        use_old_attention=use_old_attention
     )
     model = GPT(mconf)
     if use_svd_embs:
