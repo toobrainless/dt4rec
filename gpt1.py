@@ -33,77 +33,7 @@ class GPTConfig:
             setattr(self, k, v)
 
 
-class GPT1Config(GPTConfig):
-    """GPT-1 like network roughly 125M params"""
-
-    n_layer = 12
-    n_head = 12
-    n_embd = 768
-
-
-class CausalSelfAttentionOld(nn.Module):
-    """
-    A vanilla multi-head masked self-attention layer with a projection at the end.
-    It is possible to use torch.nn.MultiheadAttention here but I am including an
-    explicit implementation here to show that there is nothing too scary here.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        assert config.n_embd % config.n_head == 0
-        # key, query, value projections for all heads
-        self.key = nn.Linear(config.n_embd, config.n_embd)
-        self.query = nn.Linear(config.n_embd, config.n_embd)
-        self.value = nn.Linear(config.n_embd, config.n_embd)
-        # regularization
-        self.attn_drop = nn.Dropout(config.attn_pdrop)
-        self.resid_drop = nn.Dropout(config.resid_pdrop)
-        # output projection
-        self.proj = nn.Linear(config.n_embd, config.n_embd)
-        # causal mask to ensure that attention is only applied to the left in the input sequence
-        # self.register_buffer("mask", torch.tril(torch.ones(config.block_size, config.block_size))
-        #                              .view(1, 1, config.block_size, config.block_size))
-        self.register_buffer(
-            "mask",
-            torch.tril(torch.ones(config.block_size + 1, config.block_size + 1)).view(
-                1, 1, config.block_size + 1, config.block_size + 1
-            ),
-        )
-        self.n_head = config.n_head
-
-    def forward(self, x):
-        """
-        Apply attention
-        """
-        B, T, C = x.size()  # noqa: N806
-
-        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        k = (
-            self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        )  # (B, nh, T, hs)
-        q = (
-            self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        )  # (B, nh, T, hs)
-        v = (
-            self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        )  # (B, nh, T, hs)
-
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.mask[:, :, :T, :T] == 0, float("-inf"))
-        att = F.softmax(att, dim=-1)
-        att = self.attn_drop(att)
-        y = att @ v  # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        y = (
-            y.transpose(1, 2).contiguous().view(B, T, C)
-        )  # re-assemble all head outputs side by side
-
-        # output projection
-        y = self.resid_drop(self.proj(y))
-        return y
-
-
-class CausalSelfAttentionNew(nn.Module):
+class CausalSelfAttention(nn.Module):
 
     def __init__(
         self,
@@ -167,20 +97,13 @@ class Block(nn.Module):
         super().__init__()
         self.ln1 = nn.LayerNorm(config.n_embd)
         self.ln2 = nn.LayerNorm(config.n_embd)
-        self.attn = nn.MultiheadAttention(
-            embed_dim=config.n_embd,
+
+        self.attn = CausalSelfAttention(
             num_heads=config.n_head,
+            embed_dimension=config.n_embd,
             dropout=config.attn_pdrop,
+            is_causal=True,
         )
-        if config.use_old_attention:
-            self.attn = CausalSelfAttentionOld(config)
-        else:
-            self.attn = CausalSelfAttentionNew(
-                num_heads=config.n_head,
-                embed_dimension=config.n_embd,
-                dropout=config.attn_pdrop,
-                is_causal=True,
-            )
 
         self.mlp = nn.Sequential(
             nn.Linear(config.n_embd, 4 * config.n_embd),
