@@ -76,6 +76,12 @@ def main():
         max_timestep=item_num,
     )
     model = GPT(mconf)
+
+    total_params = 0
+    for param in model.parameters():
+        total_params += param.numel()
+    print(f"Param num: {total_params}")
+
     if use_svd_embs:
         item_embs = np.load("/home/hdilab/amgimranov/my_dt4rec/item_embs_ilya.npy")
         model.state_repr.item_embeddings.weight.data = torch.from_numpy(item_embs)
