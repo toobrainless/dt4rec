@@ -1,6 +1,6 @@
 import bisect
 import random
-from typing import List, Union
+from typing import List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -190,7 +190,7 @@ def get_all_seqs(df, seq_len, pad_value, user_num):
     return all_seqs
 
 
-def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num):
+def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num, batch_size):
     df = df.sort_values(["user_idx", "timestamp"])
     df.groupby(by=["user_idx"])
 
@@ -198,7 +198,7 @@ def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num):
 
     dataloader = DataLoader(
         SeqsDataset(all_seqs, memory_size=memory_size, item_num=item_num),
-        128,
+        batch_size,
         shuffle=True,
         pin_memory=True,
         num_workers=4,
@@ -375,12 +375,14 @@ def split_and_pad_tensor(tensor, pad_token, chunk_size=30):
     return chunks
 
 
-def calc_successive_metrics(model, test_sequences, data_description_temp):
+def calc_successive_metrics_old(
+    model, test_sequences, data_description_temp, chunk_size=30
+):
     pad_token = model.state_repr.item_embeddings.padding_idx
     item_num = pad_token
     seqs = torch.concat(
         [
-            split_and_pad_tensor(torch.tensor(x), pad_token)
+            split_and_pad_tensor(torch.tensor(x), pad_token, chunk_size=chunk_size)
             for x in test_sequences.values
         ]
     )
@@ -412,8 +414,8 @@ def calc_successive_metrics(model, test_sequences, data_description_temp):
             for recs_idx, recs in enumerate(logits):
                 recs[labels[logits_idx, pad_idx:recs_idx]] = -torch.inf
         predicted_items = batch_logits.argsort(axis=-1)[:, :, -10:]
-        # labels [batch_size x 30]
-        # predicted_items [batch_size x 30 x 10]
+        # labels [batch_size x traj_len]
+        # predicted_items [batch_size x traj_len x 10]
         _, _, hit_index = np.where(predicted_items == labels[..., None])
         cov.append(
             len(np.unique(predicted_items.ravel())) / data_description_temp["n_items"]
@@ -435,3 +437,111 @@ def calc_successive_metrics(model, test_sequences, data_description_temp):
     cov = len(unique_recommendations) / data_description_temp["n_items"]
 
     return {"hr": hr, "mrr": mrr, "ndcg": ndcg, "cov": cov, "danil_cov": danil_cov}
+
+
+def calc_successive_metrics(model, test_sequences, data_description_temp):
+    def predict_sequential(model, target_seq, seen_seq):  # example for SASRec
+        pad_token = model.state_repr.item_embeddings.padding_idx
+        item_num = pad_token
+        maxlen = 100  # тут длина контекста сасрека
+
+        n_seen = len(seen_seq)
+        n_targets = len(target_seq)
+        seq = np.concatenate([seen_seq, target_seq])
+
+        with torch.no_grad():
+            pad_seq = torch.as_tensor(
+                np.pad(
+                    seq,
+                    (max(0, maxlen - n_seen), 0),
+                    mode="constant",
+                    constant_values=pad_token,
+                ),
+                dtype=torch.int64,
+                device="cpu",
+            )
+            log_seqs = torch.as_strided(
+                pad_seq[-n_targets - maxlen :], (n_targets + 1, maxlen), (1, 1)
+            )
+
+            dataset = SeqsDataset(log_seqs, 3, item_num)
+            dataloader = DataLoader(
+                dataset,
+                batch_size=128,
+                shuffle=False,
+                num_workers=4,
+                pin_memory=True,
+            )
+            batch = next(iter(dataloader))
+            logits = []
+            for batch in dataloader:
+                logits.append(  # noqa: PERF401
+                    model(**{key: value.to("cuda") for key, value in batch.items()})[
+                        :, -1, :
+                    ]
+                    .detach()
+                    .cpu()
+                )
+            logits = torch.concatenate(logits)
+
+        return logits.numpy()
+
+    def recommend_sequential(
+        model,
+        target_seq: Union[list, np.ndarray],
+        seen_seq: Union[list, np.ndarray],
+        topn: int,
+    ):
+        """Given an item sequence and a sequence of next target items,
+        predict top-n candidates for each next step in the target sequence.
+        """
+        model.eval()
+        predictions = predict_sequential(model, target_seq[:-1], seen_seq)
+        predictions[:, seen_seq] = -np.inf
+        for k in range(1, predictions.shape[0]):
+            predictions[k, target_seq[:k]] = -np.inf
+        predicted_items = np.apply_along_axis(topidx, 1, predictions, topn)
+        return predicted_items
+
+    def topidx(arr, topn):
+        parted = np.argpartition(arr, -topn)[-topn:]
+        return parted[np.argsort(-arr[parted])]
+
+    topn = 10
+    cum_hits = 0
+    cum_reciprocal_ranks = 0.0
+    cum_discounts = 0.0
+    unique_recommendations = set()
+    total_count = 0
+    cov = []
+    unique_recommendations = set()
+
+    # Loop over each user and test sequence
+    for user, test_seq in tqdm(test_sequences.items(), total=len(test_sequences)):
+        seen_seq = test_seq[:1]
+        test_seq = test_seq[1:]
+        num_predictions = len(test_seq)
+        if not num_predictions:  # if no test items left - skip user
+            continue
+
+        # Get predicted items
+        predicted_items = recommend_sequential(model, test_seq, seen_seq, topn)
+
+        # compute hit steps and indices
+        hit_steps, hit_index = np.where(predicted_items == np.atleast_2d(test_seq).T)
+        unique_recommendations |= set(np.unique(predicted_items).tolist())
+
+        num_hits = hit_index.size
+        if num_hits:
+            cum_hits += num_hits
+            cum_reciprocal_ranks += np.sum(1.0 / (hit_index + 1))
+            cum_discounts += np.sum(1.0 / np.log2(hit_index + 2))
+        total_count += num_predictions
+
+    # evaluation metrics for the current model
+    hr = cum_hits / total_count
+    mrr = cum_reciprocal_ranks / total_count
+    ndcg = cum_discounts / total_count
+    cov = len(unique_recommendations) / data_description_temp["n_items"]
+
+    return {"hr": hr, "mrr": mrr, "ndcg": ndcg, "cov": cov}

@@ -27,7 +27,7 @@ def main():
     use_svd_embs = argv[2] == "True"
     learn_svd_embs = argv[3] == "True"
 
-    trajectory_len = 30
+    trajectory_len = 100
 
     # get and fix Danil get_dataset
     columns_mapping = {
@@ -57,7 +57,7 @@ def main():
         .tail(trajectory_len - 1)
     )
     validate_dataset = LeaveOneOutDataset(last_df, user_num, item_num)
-    batch_size = 128
+    batch_size = 96
     validate_dataloader = DataLoader(
         validate_dataset,
         batch_size=batch_size,
@@ -83,10 +83,9 @@ def main():
     print(f"Param num: {total_params}")
 
     if use_svd_embs:
-        item_embs = np.load("/home/hdilab/amgimranov/my_dt4rec/item_embs_ilya.npy")
+        item_embs = np.load("/home/hdilab/amgimranov/dt4rec/item_embs_ilya.npy")
         model.state_repr.item_embeddings.weight.data = torch.from_numpy(item_embs)
-        if not learn_svd_embs:
-            model.state_repr.item_embeddings.weight.requires_grad = False
+        model.state_repr.item_embeddings.weight.requires_grad = learn_svd_embs
     #
 
     # create trainer
@@ -99,6 +98,7 @@ def main():
         pad_value=item_num,
         user_num=user_num,
         item_num=item_num,
+        batch_size=batch_size,
     )
 
     optimizer = torch.optim.AdamW(

@@ -163,12 +163,15 @@ cython_debug/
 
 # my stuff
 tasks.md
+*.log
+cmds.pt
 
 # folders
 fqe_values
 data_split
 experiments
 models
+old_results
 *.npy
 *.pt
 *.ipynb

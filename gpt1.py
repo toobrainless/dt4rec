@@ -16,7 +16,7 @@ class GPTConfig:
     attn_pdrop = 0.1
     n_layer = 6
     n_head = 8
-    n_embd = 128
+    n_embd = 64
     memory_size = 3
 
     def __init__(self, vocab_size, block_size, **kwargs):

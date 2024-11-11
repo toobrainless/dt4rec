@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # Запуск train.py с разными аргументами
-python3 train.py old_attn_emb_64 False False True False
-python3 train.py new_attn_emb_64 False False False False
-python3 train.py old_attn_emb_128 False False True True
-python3 train.py new_attn_emb_128 False False False True
+python3 train.py emb_64_traj_100_default False False
+python3 train.py emb_64_traj_100_svd_freeze True False
+python3 train.py emb_64_traj_100_svd_unfreeze True True
 # Добавь столько команд, сколько нужно
 
 # Выводим сообщение об окончании всех запусков
