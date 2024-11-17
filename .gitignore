@@ -175,3 +175,4 @@ old_results
 *.npy
 *.pt
 *.ipynb
+make_exp.sh
