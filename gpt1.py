@@ -299,7 +299,7 @@ class GPT(nn.Module):
         return optim_groups
 
     # state, action, and return
-    def forward(
+    def calc_hidden_state(
         self,
         states,
         actions,
@@ -374,12 +374,25 @@ class GPT(nn.Module):
         x = self.drop(token_embeddings + position_embeddings)
         x = self.blocks(x)
         x = self.ln_f(x)
-        logits = self.head(x)
 
         if actions is not None:
-            logits = logits[:, 1::3, :]  # only keep predictions from state_embeddings
+            x = x[:, 1::3, :]  # only keep predictions from state_embeddings
         elif actions is None:
-            logits = logits[:, 1:, :]
+            x = x[:, 1:, :]
+
+        return x
+
+    def forward(
+        self,
+        states,
+        actions,
+        rtgs,
+        timesteps,
+        users,
+    ):
+        x = self.calc_hidden_state(states, actions, rtgs, timesteps, users)
+        logits = self.head(x)
+
         return logits
 
     def predict(self, states, actions, rtgs, timesteps, users):
