@@ -1,13 +1,15 @@
 import logging
+import time
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 from torch.nn import functional as func
 from tqdm import tqdm
-import time
 
-from utils import calc_metrics
+from utils import (calc_leave_one_out_full, calc_leave_one_out_partial,
+                   calc_metrics)
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +46,16 @@ class Trainer:
         model,
         train_dataloader,
         tconf,
+        exp_name,
+        full_eval,
         validate_dataloader=None,
         train_df=None,
         test_df=None,
         use_cuda=True,
+        validation_num_batch=None,
     ):
+        self.exp_name = exp_name
+        (Path("models") / exp_name).mkdir(exist_ok=True)
         self.metrics = []
         self.model = model
         self.train_dataloader = train_dataloader
@@ -59,6 +66,7 @@ class Trainer:
         self.validate_dataloader = validate_dataloader
         self.train_df = train_df
         self.test_df = test_df
+        self.fulll_eval = full_eval
 
         # take over whatever gpus are on the system
         self.device = "cpu"
@@ -66,6 +74,10 @@ class Trainer:
             self.device = torch.cuda.current_device()
             # self.model = torch.nn.DataParallel(self.model).to(self.device)
             self.model = self.model.to("cuda")
+        if validation_num_batch is None:
+            self.validation_num_batch = len(validate_dataloader)
+        else:
+            self.validation_num_batch = validation_num_batch
 
     def _move_batch(self, batch):
         return [elem.to(self.device) for elem in batch]
@@ -77,6 +89,7 @@ class Trainer:
         pbar = tqdm(
             enumerate(self.train_dataloader),
             total=len(self.train_dataloader),
+            desc="_train_epoch",
         )
 
         for iter_, batch in pbar:
@@ -109,21 +122,20 @@ class Trainer:
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
 
-    def _evaluation_epoch(self):
-        self.model.eval()
-        item_num = self.model.config.vocab_size - 1
-        user_num = self.model.user_num
-        logits = np.zeros((user_num, item_num))
+    def _evalutation_epoch(self):
+        if self.fulll_eval:
+            metrics = calc_leave_one_out_full(
+                self.model, self.validate_dataloader, self.train_df, self.test_df
+            )
+        else:
+            metrics = calc_leave_one_out_partial(
+                self.model,
+                self.validate_dataloader,
+                self.validation_num_batch,
+                self.train_df,
+                self.test_df,
+            )
 
-        for idx, batch in tqdm(
-            enumerate(self.validate_dataloader), total=len(self.validate_dataloader)
-        ):
-            batch = {key: value.to("cuda") for key, value in batch.items()}
-            output = self.model(**batch)[:, -1, :-1].detach().cpu().numpy()
-            batch_size = output.shape[0]
-            logits[idx * batch_size : (idx + 1) * batch_size] = output
-
-        metrics = calc_metrics(logits, self.train_df, self.test_df)
         print(metrics)
         self.metrics.append(metrics)
 
@@ -135,7 +147,11 @@ class Trainer:
             start = time.time()
             self._train_epoch(epoch)
             end = time.time()
+            torch.save(self.model, f"models/{self.exp_name}/epoch{epoch}.pickle")
             if self.validate_dataloader is not None:
-                self._evaluation_epoch()
+                if self.fulll_eval:
+                    self._full_evaluation()
+                else:
+                    self._partial_evaluation()
         self.metrics[-1]["epoch_time"] = end - start
         return self.metrics
