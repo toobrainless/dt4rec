@@ -49,7 +49,6 @@ class Trainer:
         train_df=None,
         test_df=None,
         use_cuda=True,
-        validation_num_batch=None,
         len_epoch=None,
     ):
         self.exp_name = exp_name
@@ -72,10 +71,6 @@ class Trainer:
             self.device = torch.cuda.current_device()
             # self.model = torch.nn.DataParallel(self.model).to(self.device)
             self.model = self.model.to("cuda")
-        if validation_num_batch is None:
-            self.validation_num_batch = len(validate_dataloader)
-        else:
-            self.validation_num_batch = validation_num_batch
 
     def _move_batch(self, batch):
         return [elem.to(self.device) for elem in batch]
@@ -129,7 +124,6 @@ class Trainer:
         metrics = calc_leave_one_out(
             self.model,
             self.validate_dataloader,
-            self.validation_num_batch,
             self.train_df,
             self.test_df,
         )

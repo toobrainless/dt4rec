@@ -492,13 +492,13 @@ def calc_successive_metrics(model, test_sequences, data_description_temp, device
 
 
 def calc_leave_one_out(
-    model, validate_dataloader, validation_num_batch, train_df, test_df
+    model, validate_dataloader, train_df, test_df
 ):
     model.eval()
     item_num = model.config.vocab_size - 1
     logits = np.zeros((len(test_df), item_num))
 
-    for idx, batch in tqdm(enumerate(validate_dataloader), total=validation_num_batch):
+    for idx, batch in tqdm(enumerate(validate_dataloader), total=len(validate_dataloader)):
         with torch.no_grad():
             batch = {key: value.to("cuda") for key, value in batch.items()}
             output = model(**batch)[:, -1, :-1].detach().cpu().numpy()

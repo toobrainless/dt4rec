@@ -95,6 +95,7 @@ def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
 @click.option("--trajectory_len", "-tl", default=100)
 @click.option("--calc_successive", "-cs", default=False)
 @click.option("--len_epoch", "-le", default=1000)
+@click.option("--num_epoch", "-ne", default=10)
 def main(
     exp_name,
     ds_name,
@@ -105,6 +106,7 @@ def main(
     trajectory_len,
     calc_successive,
     len_epoch,
+    num_epoch,
 ):
     (
         train,
@@ -115,7 +117,7 @@ def main(
         user_num,
     ) = get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size)
 
-    print(f"{len(train_dataloader) / len_epoch=}")
+    print(f"{len_epoch / len(train_dataloader)=}")
 
     # create model
     mconf = GPTConfig(
@@ -130,7 +132,7 @@ def main(
     total_params = 0
     for param in model.parameters():
         total_params += param.numel()
-    print(f"Param num: {total_params}")
+    print(f"param num: {total_params}")
 
     if use_svd:
         item_embs = np.load("/home/hdilab/amgimranov/dt4rec/item_embs_ilya.npy")
@@ -139,7 +141,7 @@ def main(
     #
 
     # create trainer
-    tconf = TrainerConfig(epochs=100)
+    tconf = TrainerConfig(epochs=num_epoch)
 
     optimizer = torch.optim.AdamW(
         model.configure_optimizers(),
@@ -159,7 +161,6 @@ def main(
         train,
         holdout,
         True,
-        8,
         len_epoch,
     )
     del train
