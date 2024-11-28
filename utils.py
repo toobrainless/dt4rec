@@ -177,31 +177,31 @@ def make_rsa(item_seq, memory_size, item_num, inference=False):
 #     return items.reshape(-1, seq_len)
 
 
-def get_all_seqs(df, seq_len, pad_value, user_num):
-    num_trajects = 3
-    unique_users = df.user_idx.unique()
-    additional_df = pd.DataFrame(
-        {
-            "user_idx": unique_users.repeat(seq_len * num_trajects),
-            "item_idx": np.full(len(unique_users) * seq_len * num_trajects, pad_value),
-            "timestamp": np.full(len(unique_users) * seq_len * num_trajects, 0),
-            "ratings": np.full(len(unique_users) * seq_len * num_trajects, 1),
-        }
-    )
-    print("start concat")
-    total_df = pd.concat([df, additional_df])
-    print("finish")
-    del df, additional_df
-    total_df = (
-        total_df.sort_values(["user_idx", "timestamp"])
-        .groupby("user_idx")
-        .tail(seq_len * num_trajects)
-        .reset_index()
-        .sort_values(["user_idx", "timestamp"])
-    )
-    all_seqs = total_df.item_idx.values.reshape(-1, seq_len)
+# def get_all_seqs(df, seq_len, pad_value, user_num):
+#     num_trajects = 3
+#     unique_users = df.user_idx.unique()
+#     additional_df = pd.DataFrame(
+#         {
+#             "user_idx": unique_users.repeat(seq_len * num_trajects),
+#             "item_idx": np.full(len(unique_users) * seq_len * num_trajects, pad_value),
+#             "timestamp": np.full(len(unique_users) * seq_len * num_trajects, 0),
+#             "ratings": np.full(len(unique_users) * seq_len * num_trajects, 1),
+#         }
+#     )
+#     print("start concat")
+#     total_df = pd.concat([df, additional_df])
+#     print("finish")
+#     del df, additional_df
+#     total_df = (
+#         total_df.sort_values(["user_idx", "timestamp"])
+#         .groupby("user_idx")
+#         .tail(seq_len * num_trajects)
+#         .reset_index()
+#         .sort_values(["user_idx", "timestamp"])
+#     )
+#     all_seqs = total_df.item_idx.values.reshape(-1, seq_len)
 
-    return torch.tensor(all_seqs)
+#     return torch.tensor(all_seqs)
 
 
 # def get_seqs(group: pd.DataFrame, seq_len, pad_value):
@@ -229,10 +229,44 @@ def get_all_seqs(df, seq_len, pad_value, user_num):
 #     return all_seqs
 
 
+def get_all_seqs(df, seq_len, pad_value, user_num):
+    df = df.sort_values(["user_idx", "timestamp"])
+    count_df = df.groupby("user_idx").count()
+    residuals_dict = ((seq_len - count_df["item_idx"]) % seq_len).to_dict()
+
+    new_df = [df]
+
+    for user, residual in residuals_dict.items():
+        new_df.append(
+            pd.DataFrame(
+                {
+                    "user_idx": [user] * residual,
+                    "item_idx": [pad_value] * residual,
+                    "timestamp": [0] * residual,
+                }
+            )
+        )
+
+    total_df = pd.concat(new_df).sort_values(["user_idx", "timestamp"])
+    seqs = total_df.item_idx.values.reshape(-1, seq_len)
+
+    return torch.from_numpy(seqs).long()
+
+
 def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num, batch_size):
     print("get_dataloder")
 
-    all_seqs = get_all_seqs(df, seq_len, pad_value, user_num)
+    if len(df) < 1e6:
+        all_seqs = get_all_seqs(df, seq_len, pad_value, user_num)
+    else:
+        # all_seqs = torch.from_numpy(
+        #     np.load("/storage/arkady/gonzales/lab/dt4rec/all_seqs.npy")
+        # ).long()
+        # all_seqs = torch.from_numpy(
+        #     np.load("/storage/arkady/gonzales/lab/dt4rec/all_seqs.pt")
+        # ).long()
+        # all_seqs = torch.load("/storage/arkady/gonzales/lab/dt4rec/all_seqs.pt")
+        all_seqs = torch.load("/storage/arkady/gonzales/lab/dt4rec/data_split/zvuk_danil/training_temp_seqs.pt")
     # print("all_seqs", all_seqs.shape)
     # all_seqs = all_seqs[np.random.choice(np.arange(len(all_seqs)), len(all_seqs) // 10, replace=False)]
     # print("all_seqs", all_seqs.shape)
@@ -249,13 +283,16 @@ def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num, batc
 
 
 class LeaveOneOutDataset:
-    def __init__(self, last_df, user_num, item_num, seq_len):
+    def __init__(self, last_df, user_num, item_num, seq_len, users_map=None):
         self.last_df = last_df
         self.user_num = user_num
         self.item_num = item_num
         self.seq_len = seq_len
+        self.users_map = users_map
 
     def __getitem__(self, user):
+        if self.users_map is not None:
+            user = self.users_map[user]
         items = torch.from_numpy(
             self.last_df[self.last_df.user_idx == user].item_idx.to_numpy()
         )
@@ -266,17 +303,18 @@ class LeaveOneOutDataset:
         return rsa
 
     def __len__(self):
-        return self.user_num
+        return self.user_num if self.users_map is None else len(self.users_map)
 
 
 def calc_metrics(logits, train, test):
     evaluator = Evaluator(top_k=[10])
-    scores_downvoted = evaluator.downvote_seen_items(
-        logits,
-        train.rename(
-            columns={"user_idx": "userid", "item_idx": "itemid", "relevance": "rating"}
-        ),
-    )
+    # scores_downvoted = evaluator.downvote_seen_items(
+    #     logits,
+    #     train.rename(
+    #         columns={"user_idx": "userid", "item_idx": "itemid", "relevance": "rating"}
+    #     ),
+    # )
+    scores_downvoted = logits
     recs = evaluator.topk_recommendations(scores_downvoted)
     metrics = evaluator.compute_metrics(
         test.rename(
@@ -291,7 +329,7 @@ def calc_metrics(logits, train, test):
     return metrics
 
 
-def get_dataset(drop_bad_ratings=False):
+def get_dataset(seq_len, drop_bad_ratings=False):
     df = MovieLens("1m").ratings.rename(
         columns={
             "user_id": "user_idx",
@@ -312,8 +350,12 @@ def get_dataset(drop_bad_ratings=False):
     item_num = train["item_idx"].max() + 1
     user_num = train["user_idx"].max() + 1
 
-    last_df = train.sort_values(["user_idx", "timestamp"]).groupby("user_idx").tail(29)
-    validate_dataset = LeaveOneOutDataset(last_df, user_num, item_num)
+    last_df = (
+        train.sort_values(["user_idx", "timestamp"])
+        .groupby("user_idx")
+        .tail(seq_len - 1)
+    )
+    validate_dataset = LeaveOneOutDataset(last_df, user_num, item_num, seq_len)
     batch_size = 128
     validate_dataloader = DataLoader(
         validate_dataset,
@@ -626,6 +668,32 @@ def calc_leave_one_out_partial(
     metrics["ndcg@10"] = metrics["ndcg@10"] / len(local_metrics)
     metrics["hr@10"] = metrics["hr@10"] / len(local_metrics)
 
+    return metrics
+
+
+def calc_leave_one_out_partial(
+    model, validate_dataloader, validation_num_batch, train_df, test_df
+):
+    model.eval()
+    item_num = model.config.vocab_size - 1
+    logits = np.zeros((128 * validation_num_batch, item_num))
+
+    for idx, batch in tqdm(enumerate(validate_dataloader), total=validation_num_batch):
+        if idx >= validation_num_batch:
+            break
+        with torch.no_grad():
+            batch = {key: value.to("cuda") for key, value in batch.items()}
+            output = model(**batch)[:, -1, :-1].detach().cpu().numpy()
+        batch_size = output.shape[0]
+        logits[idx * batch_size : (idx + 1) * batch_size] = output
+
+    # users = np.arange(idx * batch_size)
+    # local_train = train_df[train_df.user_idx.isin(users)].copy()
+    # local_test = test_df[test_df.user_idx.isin(users)].copy()
+    local_train = train_df[train_df.user_idx.isin(test_df.user_idx.unique())].copy()
+    local_test = test_df.copy()
+    metrics = calc_metrics(logits, local_train, local_test)
+    model.train()
     return metrics
 
 
