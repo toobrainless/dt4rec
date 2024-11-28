@@ -10,69 +10,56 @@ from torch.utils.data import DataLoader
 
 from gpt1 import GPT, GPTConfig
 from trainer import Trainer, TrainerConfig
-from utils import (LeaveOneOutDataset, WarmUpScheduler,
-                   calc_successive_metrics, data_to_sequences, get_dataloader)
+from utils import (
+    LeaveOneOutDataset,
+    WarmUpScheduler,
+    calc_successive_metrics,
+    data_to_sequences,
+    get_dataloader,
+)
 
 torch.manual_seed(41)
 np.random.seed(41)
 
+columns_mapping = {
+    "userid": "user_idx",
+    "itemid": "item_idx",
+    "rating": "relevance",
+    "timestamp": "timestamp",
+}
+inverse_columns_mapping = {value: key for key, value in columns_mapping.items()}
 
-@click.command()
-@click.argument("exp_name")
-@click.option("--train_batch_size", "-tbs", default=128)
-@click.option("--validate_batch_size", "-vbs", default=128)
-@click.option("--use_svd", default=False)
-@click.option("--learn_svd", default=False)
-@click.option("--trajectory_len", "-tl", default=100)
-@click.option("--calc_successive", "-cs", default=False)
-@click.option("--use_zvuk", "-uz", is_flag=True)
-@click.option("--full_eval", "-fe", is_flag=True)
-@click.option("--self_split", "-ss", is_flag=True)
-def main(
-    exp_name,
-    train_batch_size,
-    validate_batch_size,
-    use_svd,
-    learn_svd,
-    trajectory_len,
-    calc_successive,
-    use_zvuk,
-    full_eval,
-    self_split,
-):
-    # exp_name = f"use_zvuk_{use_zvuk}__trajectory_len_{trajectory_len}"
-    # get and fix Danil get_dataset
-    columns_mapping = {
-        "userid": "user_idx",
-        "itemid": "item_idx",
-        "rating": "relevance",
-        "timestamp": "timestamp",
-    }
-    inverse_columns_mapping = {value: key for key, value in columns_mapping.items()}
 
-    def read_and_rename(path, use_csv=False):
-        return (
-            pd.read_csv(path).rename(columns=columns_mapping)
-            if use_csv
-            else pd.read_parquet(path).rename(columns=columns_mapping)
-        )
-
-    print("read data")
-    testset_valid_temp = read_and_rename("data_split/zvuk_danil/training_temp.parquet")
-    # testset = read_and_rename("data_split/zvuk/testset.parquet")
-    testset = None
-    holdout_valid_temp = read_and_rename("data_split/zvuk_danil/holdout_valid_temp.parquet")
-
-    item_num = testset_valid_temp["item_idx"].max() + 1
-    user_num = testset_valid_temp["user_idx"].max() + 1
-    user_map = np.array(sorted(holdout_valid_temp.user_idx.unique()))
-    # create validate_datalaoder
-    last_df = (
-        testset_valid_temp[testset_valid_temp.user_idx.isin(holdout_valid_temp.user_idx.unique())].sort_values(["user_idx", "timestamp"])
-        .groupby("user_idx")
-        .tail(trajectory_len - 1)
+def read_and_rename(path, use_csv=False):
+    return (
+        pd.read_csv(path).rename(columns=columns_mapping)
+        if use_csv
+        else pd.read_parquet(path).rename(columns=columns_mapping)
     )
-    validate_dataset = LeaveOneOutDataset(last_df, user_num, item_num, trajectory_len, user_map)
+
+
+def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
+    assert ds_name in ["movielens", "zvuk_danil", "zvuk_my_split"]
+    data_folder = Path(f"data_split/{ds_name}")
+
+    if ds_name == "movielens":
+        train = read_and_rename(
+            data_folder / "/testset_valid_temp.csv", use_csv=True
+        )
+        test = read_and_rename(data_folder / "testset.csv", use_csv=True)
+        holdout = read_and_rename(
+            data_folder / "holdout_valid_temp.csv", use_csv=True
+        )
+        if (data_folder / "all_seqs.pt").exists():
+            all_seqs = torch.load(data_folder / "all_seqs.pt")
+        else:
+            print("getting all_seqs...")
+
+    item_num = train.item_idx.max() + 1
+    user_num = train.user_idx.max() + 1
+
+    # create validate_datalaoder
+    validate_dataset = LeaveOneOutDataset(train, holdout, trajectory_len)
     validate_dataloader = DataLoader(
         validate_dataset,
         batch_size=validate_batch_size,
@@ -80,7 +67,57 @@ def main(
         num_workers=4,
         pin_memory=True,
     )
-    print("finish")
+
+    train_dataloader = get_dataloader(
+        train,
+        memory_size=3,
+        seq_len=trajectory_len,
+        pad_value=item_num,
+        user_num=user_num,
+        item_num=item_num,
+        batch_size=train_batch_size,
+    )
+
+    return (
+        train,
+        holdout,
+        validate_dataloader,
+        train_dataloader,
+        item_num,
+        user_num,
+    )
+
+    # get and fix Danil get_dataset
+    # columns_mapping = {
+    #     "userid": "user_idx",
+    #     "itemid": "item_idx",
+    #     "rating": "relevance",
+    #     "timestamp": "timestamp",
+    # }
+    # inverse_columns_mapping = {value: key for key, value in columns_mapping.items()}
+
+    # print("read data")
+    # testset_valid_temp = read_and_rename("data_split/zvuk_danil/training_temp.parquet")
+    # # testset = read_and_rename("data_split/zvuk/testset.parquet")
+    # testset = None
+    # holdout_valid_temp = read_and_rename("data_split/zvuk_danil/holdout_valid_temp.parquet")
+
+    # user_map = np.array(sorted(holdout_valid_temp.user_idx.unique()))
+    # # create validate_datalaoder
+    # last_df = (
+    #     testset_valid_temp[testset_valid_temp.user_idx.isin(holdout_valid_temp.user_idx.unique())].sort_values(["user_idx", "timestamp"])
+    #     .groupby("user_idx")
+    #     .tail(trajectory_len - 1)
+    # )
+    # validate_dataset = LeaveOneOutDataset(last_df, user_num, item_num, trajectory_len, user_map)
+    # validate_dataloader = DataLoader(
+    #     validate_dataset,
+    #     batch_size=validate_batch_size,
+    #     shuffle=False,
+    #     num_workers=4,
+    #     pin_memory=True,
+    # )
+    # print("finish")
     # if use_zvuk and self_split:
     #     testset_valid_temp = pd.read_parquet("data_split/zvuk_my_split/train.parquet")
     #     # testset = read_and_rename("data_split/zvuk/testset.parquet")
@@ -149,6 +186,54 @@ def main(
     #     testset_valid_temp, holdout_valid_temp, validate_dataloader, item_num, user_num = get_dataset(seq_len=trajectory_len)
     #
 
+    # train_dataloader = get_dataloader(
+    #     testset_valid_temp,
+    #     memory_size=3,
+    #     seq_len=trajectory_len,
+    #     pad_value=item_num,
+    #     user_num=user_num,
+    #     item_num=item_num,
+    #     batch_size=train_batch_size,
+    # )
+
+
+@click.command()
+@click.argument("exp_name")
+@click.argument(
+    "ds_name",
+)
+@click.option("--train_batch_size", "-tbs", default=128)
+@click.option("--validate_batch_size", "-vbs", default=128)
+@click.option("--use_svd", default=False)
+@click.option("--learn_svd", default=False)
+@click.option("--trajectory_len", "-tl", default=100)
+@click.option("--calc_successive", "-cs", default=False)
+@click.option("--use_zvuk", "-uz", is_flag=True)
+@click.option("--full_eval", "-fe", is_flag=True)
+@click.option("--self_split", "-ss", is_flag=True)
+def main(
+    exp_name,
+    ds_name,
+    train_batch_size,
+    validate_batch_size,
+    use_svd,
+    learn_svd,
+    trajectory_len,
+    calc_successive,
+    use_zvuk,
+    full_eval,
+    self_split,
+):
+    # exp_name = f"use_zvuk_{use_zvuk}__trajectory_len_{trajectory_len}"
+    (
+        train,
+        holdout,
+        validate_dataloader,
+        train_dataloader,
+        item_num,
+        user_num,
+    ) = get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size)
+
     # create model
     mconf = GPTConfig(
         user_num=user_num,
@@ -173,16 +258,6 @@ def main(
     # create trainer
     tconf = TrainerConfig(epochs=100)
 
-    train_dataloader = get_dataloader(
-        testset_valid_temp,
-        memory_size=3,
-        seq_len=trajectory_len,
-        pad_value=item_num,
-        user_num=user_num,
-        item_num=item_num,
-        batch_size=train_batch_size,
-    )
-
     optimizer = torch.optim.AdamW(
         model.configure_optimizers(),
         lr=3e-4,
@@ -199,13 +274,13 @@ def main(
         exp_name,
         full_eval,
         validate_dataloader,
-        testset_valid_temp,
-        holdout_valid_temp,
+        train,
+        holdout,
         True,
         8,
     )
-    del testset_valid_temp
-    del holdout_valid_temp
+    del train
+    del holdout
     #
 
     val_metrics = trainer.train()

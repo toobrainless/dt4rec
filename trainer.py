@@ -8,8 +8,7 @@ import torch
 from torch.nn import functional as func
 from tqdm import tqdm
 
-from utils import (calc_leave_one_out_full, calc_leave_one_out_partial,
-                   calc_metrics)
+from utils import calc_leave_one_out_full, calc_leave_one_out_partial, calc_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -128,19 +127,29 @@ class Trainer:
         return np.mean(losses)
 
     def _evalutation_epoch(self):
-        if self.fulll_eval:
-            metrics = calc_leave_one_out_full(
-                self.model, self.validate_dataloader, self.train_df, self.test_df
-            )
-        else:
-            metrics = calc_leave_one_out_partial(
-                self.model,
-                self.validate_dataloader,
-                self.validation_num_batch,
-                self.train_df,
-                self.test_df,
-            )
-  
+        # if self.fulll_eval:
+        #     metrics = calc_leave_one_out_full(
+        #         self.model, self.validate_dataloader, self.train_df, self.test_df
+        #     )
+        # else:
+        #     metrics = calc_leave_one_out_partial(
+        #         self.model,
+        #         self.validate_dataloader,
+        #         self.validation_num_batch,
+        #         self.train_df,
+        #         self.test_df,
+        #     )
+
+        from utils import calc_leave_one_out
+
+        metrics = calc_leave_one_out(
+            self.model,
+            self.validate_dataloader,
+            self.validation_num_batch,
+            self.train_df,
+            self.test_df,
+        )
+
         self.metrics.append(metrics)
 
     def train(self):

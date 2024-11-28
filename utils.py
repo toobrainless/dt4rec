@@ -282,17 +282,39 @@ def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num, batc
     return dataloader
 
 
-class LeaveOneOutDataset:
-    def __init__(self, last_df, user_num, item_num, seq_len, users_map=None):
-        self.last_df = last_df
-        self.user_num = user_num
-        self.item_num = item_num
-        self.seq_len = seq_len
-        self.users_map = users_map
+# class LeaveOneOutDataset:
+#     def __init__(self, last_df, user_num, item_num, seq_len, users_map=None):
+#         self.last_df = last_df
+#         self.user_num = user_num
+#         self.item_num = item_num
+#         self.seq_len = seq_len
+#         self.users_map = users_map
 
-    def __getitem__(self, user):
-        if self.users_map is not None:
-            user = self.users_map[user]
+#     def __getitem__(self, user):
+#         if self.users_map is not None:
+#             user = self.users_map[user]
+#         items = torch.from_numpy(
+#             self.last_df[self.last_df.user_idx == user].item_idx.to_numpy()
+#         )
+#         items = F.pad(items, (self.seq_len - 1 - len(items), 0), value=self.item_num)
+#         rsa = make_rsa(items, 3, True)
+#         rsa["rtgs"][0, -1] = 10
+
+#         return rsa
+
+#     def __len__(self):
+#         return self.user_num if self.users_map is None else len(self.users_map)
+
+class LeaveOneOutDataset:
+    def __init__(self, train, holdout, seq_len):
+        self.holdout = holdout
+        self.users_map = np.array(sorted(holdout.user_idx.unique()))
+        self.seq_len = seq_len
+        self.last_df = train[train.user_idx.isin(self.users_map)].sort_values(["user_idx", "timestamp"]).groupby("user_idx").tail(seq_len - 1)
+        self.item_num = train.item_idx.max() + 1
+
+    def __getitem__(self, idx):
+        user = self.users_map[idx]
         items = torch.from_numpy(
             self.last_df[self.last_df.user_idx == user].item_idx.to_numpy()
         )
@@ -303,7 +325,7 @@ class LeaveOneOutDataset:
         return rsa
 
     def __len__(self):
-        return self.user_num if self.users_map is None else len(self.users_map)
+        return len(self.users_map)
 
 
 def calc_metrics(logits, train, test):
@@ -629,6 +651,25 @@ def calc_successive_metrics(model, test_sequences, data_description_temp, device
     cov = len(unique_recommendations) / data_description_temp["n_items"]
 
     return {"hr": hr, "mrr": mrr, "ndcg": ndcg, "cov": cov}
+
+def calc_leave_one_out(
+    model, validate_dataloader, validation_num_batch, train_df, test_df
+):
+    model.eval()
+    item_num = model.config.vocab_size - 1
+    logits = np.zeros((len(test_df), item_num))
+
+    for idx, batch in tqdm(enumerate(validate_dataloader), total=validation_num_batch):
+        with torch.no_grad():
+            batch = {key: value.to("cuda") for key, value in batch.items()}
+            output = model(**batch)[:, -1, :-1].detach().cpu().numpy()
+        batch_size = output.shape[0]
+        logits[idx * batch_size : (idx + 1) * batch_size] = output
+
+    metrics = calc_metrics(logits, train_df, test_df)
+    model.train()
+    return metrics
+
 
 
 def calc_leave_one_out_partial(
