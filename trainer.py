@@ -3,13 +3,11 @@ import time
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import torch
 from torch.nn import functional as func
 from tqdm import tqdm
 
-from utils import (calc_leave_one_out_full, calc_leave_one_out_partial,
-                   calc_metrics, inf_loop)
+from utils import calc_leave_one_out, inf_loop
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +45,6 @@ class Trainer:
         train_dataloader,
         tconf,
         exp_name,
-        full_eval,
         validate_dataloader=None,
         train_df=None,
         test_df=None,
@@ -67,7 +64,6 @@ class Trainer:
         self.validate_dataloader = validate_dataloader
         self.train_df = train_df
         self.test_df = test_df
-        self.fulll_eval = full_eval
         self.len_epoch = len_epoch
 
         # take over whatever gpus are on the system
@@ -130,21 +126,6 @@ class Trainer:
         return np.mean(losses)
 
     def _evalutation_epoch(self):
-        # if self.fulll_eval:
-        #     metrics = calc_leave_one_out_full(
-        #         self.model, self.validate_dataloader, self.train_df, self.test_df
-        #     )
-        # else:
-        #     metrics = calc_leave_one_out_partial(
-        #         self.model,
-        #         self.validate_dataloader,
-        #         self.validation_num_batch,
-        #         self.train_df,
-        #         self.test_df,
-        #     )
-
-        from utils import calc_leave_one_out
-
         metrics = calc_leave_one_out(
             self.model,
             self.validate_dataloader,

@@ -172,64 +172,6 @@ def make_rsa(item_seq, memory_size, item_num, inference=False):
     }
 
 
-# def get_seqs(group: pd.DataFrame, seq_len, pad_value):
-#     items = torch.from_numpy(group["item_idx"].to_numpy())
-#     items = F.pad(items, (seq_len - len(items) % seq_len, 0), value=pad_value)
-#     return items.reshape(-1, seq_len)
-
-
-# def get_all_seqs(df, seq_len, pad_value, user_num):
-#     num_trajects = 3
-#     unique_users = df.user_idx.unique()
-#     additional_df = pd.DataFrame(
-#         {
-#             "user_idx": unique_users.repeat(seq_len * num_trajects),
-#             "item_idx": np.full(len(unique_users) * seq_len * num_trajects, pad_value),
-#             "timestamp": np.full(len(unique_users) * seq_len * num_trajects, 0),
-#             "ratings": np.full(len(unique_users) * seq_len * num_trajects, 1),
-#         }
-#     )
-#     print("start concat")
-#     total_df = pd.concat([df, additional_df])
-#     print("finish")
-#     del df, additional_df
-#     total_df = (
-#         total_df.sort_values(["user_idx", "timestamp"])
-#         .groupby("user_idx")
-#         .tail(seq_len * num_trajects)
-#         .reset_index()
-#         .sort_values(["user_idx", "timestamp"])
-#     )
-#     all_seqs = total_df.item_idx.values.reshape(-1, seq_len)
-
-#     return torch.tensor(all_seqs)
-
-
-# def get_seqs(group: pd.DataFrame, seq_len, pad_value):
-#     items = torch.from_numpy(group["item_idx"].to_numpy())
-#     items = F.pad(items, (seq_len, 0), value=pad_value)
-#     return items.unfold(0, seq_len, 1)
-
-# def get_seqs(group: pd.DataFrame, seq_len, pad_value):
-#     items = torch.from_numpy(group["item_idx"].to_numpy())
-#     items = F.pad(items, (seq_len - len(items) % seq_len, 0), value=pad_value)
-#     return items.reshape(-1, seq_len)
-
-
-# def get_all_seqs(df, seq_len, pad_value, user_num):
-#     df = df.sort_values(["user_idx", "timestamp"])
-#     all_seqs = []
-
-#     for user in trange(user_num):
-#         user_df = df[df.user_idx == user]
-#         user_seqs = get_seqs(user_df, seq_len, pad_value)
-#         all_seqs.append(user_seqs)
-
-#     all_seqs = torch.concat(all_seqs, dim=0)
-
-#     return all_seqs
-
-
 def get_all_seqs(df, seq_len, pad_value, user_num):
     df = df.sort_values(["user_idx", "timestamp"])
     count_df = df.groupby("user_idx").count()
@@ -254,65 +196,10 @@ def get_all_seqs(df, seq_len, pad_value, user_num):
     return torch.from_numpy(seqs).long()
 
 
-def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num, batch_size):
-    print("get_dataloder")
-
-    if len(df) < 1e6:
-        all_seqs = get_all_seqs(df, seq_len, pad_value, user_num)
-    else:
-        # all_seqs = torch.from_numpy(
-        #     np.load("/storage/arkady/gonzales/lab/dt4rec/all_seqs.npy")
-        # ).long()
-        # all_seqs = torch.from_numpy(
-        #     np.load("/storage/arkady/gonzales/lab/dt4rec/all_seqs.pt")
-        # ).long()
-        # all_seqs = torch.load("/storage/arkady/gonzales/lab/dt4rec/all_seqs.pt")
-        all_seqs = torch.load(
-            "/storage/arkady/gonzales/lab/dt4rec/data_split/zvuk_danil/training_temp_seqs.pt"
-        )
-    # print("all_seqs", all_seqs.shape)
-    # all_seqs = all_seqs[np.random.choice(np.arange(len(all_seqs)), len(all_seqs) // 10, replace=False)]
-    # print("all_seqs", all_seqs.shape)
-
-    dataloader = DataLoader(
-        SeqsDataset(all_seqs, memory_size=memory_size, item_num=item_num),
-        batch_size,
-        shuffle=True,
-        pin_memory=True,
-        num_workers=4,
-    )
-
-    return dataloader
-
-
 def inf_loop(data_loader):
     """wrapper function for endless data loader."""
     for loader in repeat(data_loader):
         yield from loader
-
-
-# class LeaveOneOutDataset:
-#     def __init__(self, last_df, user_num, item_num, seq_len, users_map=None):
-#         self.last_df = last_df
-#         self.user_num = user_num
-#         self.item_num = item_num
-#         self.seq_len = seq_len
-#         self.users_map = users_map
-
-#     def __getitem__(self, user):
-#         if self.users_map is not None:
-#             user = self.users_map[user]
-#         items = torch.from_numpy(
-#             self.last_df[self.last_df.user_idx == user].item_idx.to_numpy()
-#         )
-#         items = F.pad(items, (self.seq_len - 1 - len(items), 0), value=self.item_num)
-#         rsa = make_rsa(items, 3, True)
-#         rsa["rtgs"][0, -1] = 10
-
-#         return rsa
-
-#     def __len__(self):
-#         return self.user_num if self.users_map is None else len(self.users_map)
 
 
 class LeaveOneOutDataset:
@@ -496,70 +383,6 @@ def split_and_pad_tensor(tensor, pad_token, chunk_size=30):
     return chunks
 
 
-def calc_successive_metrics_old(
-    model, test_sequences, data_description_temp, chunk_size=30
-):
-    pad_token = model.state_repr.item_embeddings.padding_idx
-    item_num = pad_token
-    seqs = torch.concat(
-        [
-            split_and_pad_tensor(torch.tensor(x), pad_token, chunk_size=chunk_size)
-            for x in test_sequences.values
-        ]
-    )
-
-    dataset = SeqsDataset(seqs, 3, item_num)
-    dataloader = DataLoader(
-        list(zip(dataset, seqs)),
-        batch_size=128,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-    )
-
-    cum_hits = 0
-    cum_reciprocal_ranks = 0.0
-    cum_discounts = 0.0
-    unique_recommendations = set()
-    total_count = 0
-    cov = []
-
-    for batch in tqdm(dataloader, total=len(dataloader)):
-        labels = batch[1].numpy()
-        batch = {key: value.to("cuda") for key, value in batch[0].items()}
-        model.train()
-        batch_logits = model(**batch).detach().cpu().numpy()
-
-        for logits_idx, logits in enumerate(batch_logits):
-            pad_idx = len(np.where(labels[logits_idx] == pad_token)[0])
-            for recs_idx, recs in enumerate(logits):
-                recs[labels[logits_idx, pad_idx:recs_idx]] = -torch.inf
-        predicted_items = batch_logits.argsort(axis=-1)[:, :, -10:]
-        # labels [batch_size x traj_len]
-        # predicted_items [batch_size x traj_len x 10]
-        _, _, hit_index = np.where(predicted_items == labels[..., None])
-        cov.append(
-            len(np.unique(predicted_items.ravel())) / data_description_temp["n_items"]
-        )
-        hit_index = 9 - hit_index
-
-        unique_recommendations |= set(np.unique(predicted_items).tolist())
-        num_hits = hit_index.size
-        if num_hits:
-            cum_hits += num_hits
-            cum_reciprocal_ranks += np.sum(1.0 / (hit_index + 1))
-            cum_discounts += np.sum(1.0 / np.log2(hit_index + 2))
-
-    total_count = sum(map(len, test_sequences.values))
-    hr = cum_hits / total_count
-    mrr = cum_reciprocal_ranks / total_count
-    ndcg = cum_discounts / total_count
-    danil_cov = np.mean(cov)
-    cov = len(unique_recommendations) / data_description_temp["n_items"]
-
-    return {"hr": hr, "mrr": mrr, "ndcg": ndcg, "cov": cov, "danil_cov": danil_cov}
-
-
 def calc_successive_metrics(model, test_sequences, data_description_temp, device):
     def predict_sequential(model, target_seq, seen_seq):  # example for SASRec
         pad_token = model.state_repr.item_embeddings.padding_idx
@@ -684,89 +507,4 @@ def calc_leave_one_out(
 
     metrics = calc_metrics(logits, train_df, test_df)
     model.train()
-    return metrics
-
-
-def calc_leave_one_out_partial(
-    model, validate_dataloader, validation_num_batch, train_df, test_df
-):
-    model.eval()
-
-    local_metrics = []
-
-    for idx, batch in tqdm(enumerate(validate_dataloader), total=validation_num_batch):
-        with torch.no_grad():
-            batch = {key: value.to("cuda") for key, value in batch.items()}
-            output = model(**batch)[:, -1, :-1].detach().cpu().numpy()
-        batch_size = output.shape[0]
-        users = np.arange(idx * batch_size, (idx + 1) * batch_size)
-
-        local_train = train_df[train_df.user_idx.isin(users)].copy()
-        local_train.user_idx -= local_train.user_idx.min()
-
-        local_test = test_df[test_df.user_idx.isin(users)].copy()
-        local_test.user_idx -= local_test.user_idx.min()
-
-        local_metrics.append(calc_metrics(output, local_train, local_test))
-        del local_train, local_test
-        if idx >= validation_num_batch:
-            break
-        # logits[idx * batch_size : (idx + 1) * batch_size] = output
-
-    metrics = {
-        "ndcg@10": 0.0,
-        "hr@10": 0.0,
-        "cov@10": 0.0,
-    }
-    for metric in local_metrics:
-        for key, value in metric.items():
-            metrics[key] += value
-    metrics["ndcg@10"] = metrics["ndcg@10"] / len(local_metrics)
-    metrics["hr@10"] = metrics["hr@10"] / len(local_metrics)
-
-    return metrics
-
-
-def calc_leave_one_out_partial(
-    model, validate_dataloader, validation_num_batch, train_df, test_df
-):
-    model.eval()
-    item_num = model.config.vocab_size - 1
-    logits = np.zeros((128 * validation_num_batch, item_num))
-
-    for idx, batch in tqdm(enumerate(validate_dataloader), total=validation_num_batch):
-        if idx >= validation_num_batch:
-            break
-        with torch.no_grad():
-            batch = {key: value.to("cuda") for key, value in batch.items()}
-            output = model(**batch)[:, -1, :-1].detach().cpu().numpy()
-        batch_size = output.shape[0]
-        logits[idx * batch_size : (idx + 1) * batch_size] = output
-
-    # users = np.arange(idx * batch_size)
-    # local_train = train_df[train_df.user_idx.isin(users)].copy()
-    # local_test = test_df[test_df.user_idx.isin(users)].copy()
-    local_train = train_df[train_df.user_idx.isin(test_df.user_idx.unique())].copy()
-    local_test = test_df.copy()
-    metrics = calc_metrics(logits, local_train, local_test)
-    model.train()
-    return metrics
-
-
-def calc_leave_one_out_full(model, validate_dataloader, train_df, test_df):
-    model.eval()
-    item_num = model.config.vocab_size - 1
-    user_num = model.user_num
-    logits = np.zeros((user_num, item_num))
-
-    for idx, batch in tqdm(
-        enumerate(validate_dataloader), total=len(validate_dataloader)
-    ):
-        batch = {key: value.to("cuda") for key, value in batch.items()}
-        output = model(**batch)[:, -1, :-1].detach().cpu().numpy()
-        batch_size = output.shape[0]
-        logits[idx * batch_size : (idx + 1) * batch_size] = output
-
-    metrics = calc_metrics(logits, train_df, test_df)
-
     return metrics

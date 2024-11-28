@@ -1,5 +1,4 @@
 import json
-import sys
 from pathlib import Path
 
 import click
@@ -10,12 +9,10 @@ from torch.utils.data import DataLoader
 
 from gpt1 import GPT, GPTConfig
 from trainer import Trainer, TrainerConfig
-from utils import (LeaveOneOutDataset, SeqsDataset, WarmUpScheduler,
-                   calc_successive_metrics, data_to_sequences, get_all_seqs,
-                   get_dataloader)
+from utils import (LeaveOneOutDataset, SeqsDataset, calc_successive_metrics,
+                   data_to_sequences, get_all_seqs, set_seed)
 
-torch.manual_seed(41)
-np.random.seed(41)
+set_seed(41)
 
 columns_mapping = {
     "userid": "user_idx",
@@ -97,9 +94,6 @@ def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
 @click.option("--learn_svd", default=False)
 @click.option("--trajectory_len", "-tl", default=100)
 @click.option("--calc_successive", "-cs", default=False)
-@click.option("--use_zvuk", "-uz", is_flag=True)
-@click.option("--full_eval", "-fe", is_flag=True)
-@click.option("--self_split", "-ss", is_flag=True)
 @click.option("--len_epoch", "-le", default=1000)
 def main(
     exp_name,
@@ -110,9 +104,6 @@ def main(
     learn_svd,
     trajectory_len,
     calc_successive,
-    use_zvuk,
-    full_eval,
-    self_split,
     len_epoch,
 ):
     (
@@ -164,7 +155,6 @@ def main(
         train_dataloader,
         tconf,
         exp_name,
-        full_eval,
         validate_dataloader,
         train,
         holdout,
