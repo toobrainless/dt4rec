@@ -45,12 +45,14 @@ class Trainer:
         train_dataloader,
         tconf,
         exp_name,
+        checkpoints=False,
         validate_dataloader=None,
         train_df=None,
         test_df=None,
         use_cuda=True,
         len_epoch=None,
     ):
+        self.checkpoints = checkpoints
         self.exp_name = exp_name
         (Path("models") / exp_name).mkdir(exist_ok=True)
         self.metrics = []
@@ -138,7 +140,8 @@ class Trainer:
             start = time.time()
             loss = self._train_epoch(epoch)
             end = time.time()
-            torch.save(self.model, f"models/{self.exp_name}/epoch{epoch}.pickle")
+            if self.checkpoints:
+                torch.save(self.model, f"models/{self.exp_name}/epoch{epoch}.pt")
             if self.validate_dataloader is not None:
                 self._evalutation_epoch()
             self.metrics[-1]["loss"] = loss

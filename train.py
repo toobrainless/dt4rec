@@ -109,6 +109,7 @@ def get_ds(
 @click.option("--calc_successive", "-cs", default=False)
 @click.option("--len_epoch", "-le", default=1000)
 @click.option("--num_epoch", "-ne", default=10)
+@click.option("--checkpoints", "-c", default=False)
 def main(
     exp_name,
     ds_name,
@@ -120,6 +121,7 @@ def main(
     calc_successive,
     len_epoch,
     num_epoch,
+    checkpoints,
 ):
     (
         train,
@@ -170,6 +172,7 @@ def main(
         train_dataloader,
         tconf,
         exp_name,
+        checkpoints,
         validate_dataloader,
         train,
         holdout,
