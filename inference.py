@@ -55,11 +55,11 @@ def main(model_name, validate_batch_size, full_eval, use_zvuk):
     else:
         # training_temp = read_and_rename("data_split/training_temp.csv", use_csv=True)
         testset_valid_temp = read_and_rename(
-            "data_split/testset_valid_temp.csv", use_csv=True
+            "data_split/movielens/testset_valid_temp.csv", use_csv=True
         )
-        testset = read_and_rename("data_split/testset.csv", use_csv=True)
+        testset = read_and_rename("data_split/movielens/testset.csv", use_csv=True)
         holdout_valid_temp = read_and_rename(
-            "data_split/holdout_valid_temp.csv", use_csv=True
+            "data_split/movielens/holdout_valid_temp.csv", use_csv=True
         )
     print("finish")
     #
