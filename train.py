@@ -53,7 +53,6 @@ def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
         test = read_and_rename("data_split/zvuk_danil/testset.parquet")
         holdout = read_and_rename("data_split/zvuk_danil/holdout_valid_temp.parquet")
 
-
     item_num = train.item_idx.max() + 1
     user_num = train.user_idx.max() + 1
 
@@ -92,115 +91,6 @@ def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
         user_num,
     )
 
-    # get and fix Danil get_dataset
-    # columns_mapping = {
-    #     "userid": "user_idx",
-    #     "itemid": "item_idx",
-    #     "rating": "relevance",
-    #     "timestamp": "timestamp",
-    # }
-    # inverse_columns_mapping = {value: key for key, value in columns_mapping.items()}
-
-    # print("read data")
-    # testset_valid_temp = read_and_rename("data_split/zvuk_danil/training_temp.parquet")
-    # # testset = read_and_rename("data_split/zvuk/testset.parquet")
-    # testset = None
-    # holdout_valid_temp = read_and_rename("data_split/zvuk_danil/holdout_valid_temp.parquet")
-
-    # user_map = np.array(sorted(holdout_valid_temp.user_idx.unique()))
-    # # create validate_datalaoder
-    # last_df = (
-    #     testset_valid_temp[testset_valid_temp.user_idx.isin(holdout_valid_temp.user_idx.unique())].sort_values(["user_idx", "timestamp"])
-    #     .groupby("user_idx")
-    #     .tail(trajectory_len - 1)
-    # )
-    # validate_dataset = LeaveOneOutDataset(last_df, user_num, item_num, trajectory_len, user_map)
-    # validate_dataloader = DataLoader(
-    #     validate_dataset,
-    #     batch_size=validate_batch_size,
-    #     shuffle=False,
-    #     num_workers=4,
-    #     pin_memory=True,
-    # )
-    # print("finish")
-    # if use_zvuk and self_split:
-    #     testset_valid_temp = pd.read_parquet("data_split/zvuk_my_split/train.parquet")
-    #     # testset = read_and_rename("data_split/zvuk/testset.parquet")
-    #     testset = None
-    #     holdout_valid_temp = pd.read_parquet("data_split/zvuk_my_split/test.parquet")
-
-    #     item_num = testset_valid_temp["item_idx"].max() + 1
-    #     user_num = testset_valid_temp["user_idx"].max() + 1
-
-    #     # create validate_datalaoder
-    #     last_df = (
-    #         testset_valid_temp.sort_values(["user_idx", "timestamp"])
-    #         .groupby("user_idx")
-    #         .tail(trajectory_len - 1)
-    #     )
-    #     validate_dataset = LeaveOneOutDataset(last_df, user_num, item_num, trajectory_len)
-    #     validate_dataloader = DataLoader(
-    #         validate_dataset,
-    #         batch_size=validate_batch_size,
-    #         shuffle=False,
-    #         num_workers=4,
-    #         pin_memory=True,
-    #     )
-
-    # if not self_split:
-    #     if use_zvuk:
-    #         # training_temp = read_and_rename("data_split/training_temp.parquet")
-    #         testset_valid_temp = read_and_rename(
-    #             "data_split/zvuk/testset_valid_temp.parquet"
-    #         )
-    #         testset = read_and_rename("data_split/zvuk/testset.parquet")
-    #         holdout_valid_temp = read_and_rename(
-    #             "data_split/zvuk/holdout_valid_temp.parquet"
-    #         )
-    #     else:
-    #         # training_temp = read_and_rename("data_split/movielens/training_temp.csv", use_csv=True)
-    #         testset_valid_temp = read_and_rename(
-    #             "data_split/movielens/testset_valid_temp.csv", use_csv=True
-    #         )
-    #         testset = read_and_rename("data_split/movielens/testset.csv", use_csv=True)
-    #         holdout_valid_temp = read_and_rename(
-    #             "data_split/movielens/holdout_valid_temp.csv", use_csv=True
-    #         )
-    #     print("finish")
-    #     #
-
-    #     item_num = testset_valid_temp["item_idx"].max() + 1
-    #     user_num = testset_valid_temp["user_idx"].max() + 1
-
-    #     # create validate_datalaoder
-    #     last_df = (
-    #         testset_valid_temp.sort_values(["user_idx", "timestamp"])
-    #         .groupby("user_idx")
-    #         .tail(trajectory_len - 1)
-    #     )
-    #     validate_dataset = LeaveOneOutDataset(last_df, user_num, item_num, trajectory_len)
-    #     validate_dataloader = DataLoader(
-    #         validate_dataset,
-    #         batch_size=validate_batch_size,
-    #         shuffle=False,
-    #         num_workers=4,
-    #         pin_memory=True,
-    #     )
-    # else:
-    #     from utils import get_dataset
-    #     testset_valid_temp, holdout_valid_temp, validate_dataloader, item_num, user_num = get_dataset(seq_len=trajectory_len)
-    #
-
-    # train_dataloader = get_dataloader(
-    #     testset_valid_temp,
-    #     memory_size=3,
-    #     seq_len=trajectory_len,
-    #     pad_value=item_num,
-    #     user_num=user_num,
-    #     item_num=item_num,
-    #     batch_size=train_batch_size,
-    # )
-
 
 @click.command()
 @click.argument("exp_name")
@@ -216,6 +106,7 @@ def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
 @click.option("--use_zvuk", "-uz", is_flag=True)
 @click.option("--full_eval", "-fe", is_flag=True)
 @click.option("--self_split", "-ss", is_flag=True)
+@click.option("--len_epoch", "-le", default=1000)
 def main(
     exp_name,
     ds_name,
@@ -228,8 +119,8 @@ def main(
     use_zvuk,
     full_eval,
     self_split,
+    len_epoch,
 ):
-    # exp_name = f"use_zvuk_{use_zvuk}__trajectory_len_{trajectory_len}"
     (
         train,
         holdout,
@@ -238,6 +129,8 @@ def main(
         item_num,
         user_num,
     ) = get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size)
+
+    print(f"{len(train_dataloader) / len_epoch=}")
 
     # create model
     mconf = GPTConfig(
@@ -283,6 +176,7 @@ def main(
         holdout,
         True,
         8,
+        len_epoch
     )
     del train
     del holdout

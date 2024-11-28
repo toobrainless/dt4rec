@@ -8,7 +8,12 @@ import torch
 from torch.nn import functional as func
 from tqdm import tqdm
 
-from utils import calc_leave_one_out_full, calc_leave_one_out_partial, calc_metrics
+from utils import (
+    calc_leave_one_out_full,
+    calc_leave_one_out_partial,
+    calc_metrics,
+    inf_loop,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +57,13 @@ class Trainer:
         test_df=None,
         use_cuda=True,
         validation_num_batch=None,
+        len_epoch=None,
     ):
         self.exp_name = exp_name
         (Path("models") / exp_name).mkdir(exist_ok=True)
         self.metrics = []
         self.model = model
-        self.train_dataloader = train_dataloader
+        self.train_dataloader = inf_loop(train_dataloader)
         self.optimizer = tconf.optimizer
         self.epochs = tconf.epochs
         self.lr_scheduler = tconf.lr_scheduler
@@ -66,6 +72,7 @@ class Trainer:
         self.train_df = train_df
         self.test_df = test_df
         self.fulll_eval = full_eval
+        self.len_epoch = len_epoch
 
         # take over whatever gpus are on the system
         self.device = "cpu"
@@ -87,14 +94,11 @@ class Trainer:
         losses = []
         pbar = tqdm(
             enumerate(self.train_dataloader),
-            total=len(self.train_dataloader),
+            total=self.len_epoch,
             desc="_train_epoch",
         )
 
         for iter_, batch in pbar:
-            if (iter_ + 1) % 100 == 0:
-                self._evalutation_epoch()
-                print(self.metrics[-1])
             # place data on the correct device
             states, actions, rtgs, timesteps, users = (
                 batch["states"],
@@ -123,6 +127,9 @@ class Trainer:
             self.optimizer.step()
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
+
+            if iter_ >= self.len_epoch:
+                break
 
         return np.mean(losses)
 

@@ -12,6 +12,7 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm, trange
+from itertools import repeat
 
 from metrics import Evaluator
 
@@ -266,7 +267,9 @@ def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num, batc
         #     np.load("/storage/arkady/gonzales/lab/dt4rec/all_seqs.pt")
         # ).long()
         # all_seqs = torch.load("/storage/arkady/gonzales/lab/dt4rec/all_seqs.pt")
-        all_seqs = torch.load("/storage/arkady/gonzales/lab/dt4rec/data_split/zvuk_danil/training_temp_seqs.pt")
+        all_seqs = torch.load(
+            "/storage/arkady/gonzales/lab/dt4rec/data_split/zvuk_danil/training_temp_seqs.pt"
+        )
     # print("all_seqs", all_seqs.shape)
     # all_seqs = all_seqs[np.random.choice(np.arange(len(all_seqs)), len(all_seqs) // 10, replace=False)]
     # print("all_seqs", all_seqs.shape)
@@ -280,6 +283,12 @@ def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num, batc
     )
 
     return dataloader
+
+
+def inf_loop(data_loader):
+    """wrapper function for endless data loader."""
+    for loader in repeat(data_loader):
+        yield from loader
 
 
 # class LeaveOneOutDataset:
@@ -305,12 +314,18 @@ def get_dataloader(df, memory_size, seq_len, pad_value, user_num, item_num, batc
 #     def __len__(self):
 #         return self.user_num if self.users_map is None else len(self.users_map)
 
+
 class LeaveOneOutDataset:
     def __init__(self, train, holdout, seq_len):
         self.holdout = holdout
         self.users_map = np.array(sorted(holdout.user_idx.unique()))
         self.seq_len = seq_len
-        self.last_df = train[train.user_idx.isin(self.users_map)].sort_values(["user_idx", "timestamp"]).groupby("user_idx").tail(seq_len - 1)
+        self.last_df = (
+            train[train.user_idx.isin(self.users_map)]
+            .sort_values(["user_idx", "timestamp"])
+            .groupby("user_idx")
+            .tail(seq_len - 1)
+        )
         self.item_num = train.item_idx.max() + 1
 
     def __getitem__(self, idx):
@@ -652,6 +667,7 @@ def calc_successive_metrics(model, test_sequences, data_description_temp, device
 
     return {"hr": hr, "mrr": mrr, "ndcg": ndcg, "cov": cov}
 
+
 def calc_leave_one_out(
     model, validate_dataloader, validation_num_batch, train_df, test_df
 ):
@@ -669,7 +685,6 @@ def calc_leave_one_out(
     metrics = calc_metrics(logits, train_df, test_df)
     model.train()
     return metrics
-
 
 
 def calc_leave_one_out_partial(
