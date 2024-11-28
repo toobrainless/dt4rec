@@ -109,7 +109,7 @@ def get_ds(
 @click.option("--calc_successive", "-cs", default=False)
 @click.option("--len_epoch", "-le", default=1000)
 @click.option("--num_epoch", "-ne", default=10)
-@click.option("--checkpoints", "-c", default=False)
+@click.option("--checkpoints", "-c", is_flag=True)
 def main(
     exp_name,
     ds_name,

@@ -52,9 +52,10 @@ class Trainer:
         use_cuda=True,
         len_epoch=None,
     ):
-        self.checkpoints = checkpoints
         self.exp_name = exp_name
-        (Path("models") / exp_name).mkdir(exist_ok=True)
+        self.checkpoints = checkpoints
+        if self.checkpoints:
+            (Path("models") / exp_name).mkdir(exist_ok=True)
         self.metrics = []
         self.model = model
         self.train_dataloader = inf_loop(train_dataloader)
