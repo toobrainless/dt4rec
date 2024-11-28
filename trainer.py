@@ -93,6 +93,9 @@ class Trainer:
         )
 
         for iter_, batch in pbar:
+            if (iter_ + 1) % 1000 == 0:
+                self._evalutation_epoch()
+                print(self.metrics[-1])
             # place data on the correct device
             states, actions, rtgs, timesteps, users = (
                 batch["states"],
@@ -122,6 +125,8 @@ class Trainer:
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
 
+        return np.mean(losses)
+
     def _evalutation_epoch(self):
         if self.fulll_eval:
             metrics = calc_leave_one_out_full(
@@ -135,8 +140,7 @@ class Trainer:
                 self.train_df,
                 self.test_df,
             )
-
-        print(metrics)
+  
         self.metrics.append(metrics)
 
     def train(self):
@@ -145,13 +149,12 @@ class Trainer:
         """
         for epoch in range(self.epochs):
             start = time.time()
-            self._train_epoch(epoch)
+            loss = self._train_epoch(epoch)
             end = time.time()
             torch.save(self.model, f"models/{self.exp_name}/epoch{epoch}.pickle")
             if self.validate_dataloader is not None:
-                if self.fulll_eval:
-                    self._full_evaluation()
-                else:
-                    self._partial_evaluation()
-        self.metrics[-1]["epoch_time"] = end - start
+                self._evalutation_epoch()
+            self.metrics[-1]["loss"] = loss
+            self.metrics[-1]["epoch_time"] = end - start
+            print(self.metrics[-1])
         return self.metrics
