@@ -12,9 +12,11 @@ from gpt1 import GPT, GPTConfig
 from trainer import Trainer, TrainerConfig
 from utils import (
     LeaveOneOutDataset,
+    SeqsDataset,
     WarmUpScheduler,
     calc_successive_metrics,
     data_to_sequences,
+    get_all_seqs,
     get_dataloader,
 )
 
@@ -43,17 +45,14 @@ def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
     data_folder = Path(f"data_split/{ds_name}")
 
     if ds_name == "movielens":
-        train = read_and_rename(
-            data_folder / "/testset_valid_temp.csv", use_csv=True
-        )
+        train = read_and_rename(data_folder / "testset_valid_temp.csv", use_csv=True)
         test = read_and_rename(data_folder / "testset.csv", use_csv=True)
-        holdout = read_and_rename(
-            data_folder / "holdout_valid_temp.csv", use_csv=True
-        )
-        if (data_folder / "all_seqs.pt").exists():
-            all_seqs = torch.load(data_folder / "all_seqs.pt")
-        else:
-            print("getting all_seqs...")
+        holdout = read_and_rename(data_folder / "holdout_valid_temp.csv", use_csv=True)
+    if ds_name == "zvuk_danil":
+        train = read_and_rename("data_split/zvuk_danil/training_temp.parquet")
+        test = read_and_rename("data_split/zvuk_danil/testset.parquet")
+        holdout = read_and_rename("data_split/zvuk_danil/holdout_valid_temp.parquet")
+
 
     item_num = train.item_idx.max() + 1
     user_num = train.user_idx.max() + 1
@@ -67,15 +66,21 @@ def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
         num_workers=4,
         pin_memory=True,
     )
+    # create train_dataloader
+    if (data_folder / "all_seqs.pt").exists():
+        print("all_seqs exists...")
+        all_seqs = torch.load(data_folder / "all_seqs.pt")
+    else:
+        print("getting all_seqs...")
+        all_seqs = get_all_seqs(train, trajectory_len, train.item_idx.max() + 1, None)
+        torch.save(all_seqs, data_folder / "all_seqs.pt")
 
-    train_dataloader = get_dataloader(
-        train,
-        memory_size=3,
-        seq_len=trajectory_len,
-        pad_value=item_num,
-        user_num=user_num,
-        item_num=item_num,
+    train_dataloader = DataLoader(
+        SeqsDataset(all_seqs, memory_size=3, item_num=item_num),
         batch_size=train_batch_size,
+        shuffle=True,
+        pin_memory=True,
+        num_workers=4,
     )
 
     return (

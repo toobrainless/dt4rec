@@ -92,7 +92,7 @@ class Trainer:
         )
 
         for iter_, batch in pbar:
-            if (iter_ + 1) % 1000 == 0:
+            if (iter_ + 1) % 100 == 0:
                 self._evalutation_epoch()
                 print(self.metrics[-1])
             # place data on the correct device
