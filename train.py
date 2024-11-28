@@ -10,15 +10,9 @@ from torch.utils.data import DataLoader
 
 from gpt1 import GPT, GPTConfig
 from trainer import Trainer, TrainerConfig
-from utils import (
-    LeaveOneOutDataset,
-    SeqsDataset,
-    WarmUpScheduler,
-    calc_successive_metrics,
-    data_to_sequences,
-    get_all_seqs,
-    get_dataloader,
-)
+from utils import (LeaveOneOutDataset, SeqsDataset, WarmUpScheduler,
+                   calc_successive_metrics, data_to_sequences, get_all_seqs,
+                   get_dataloader)
 
 torch.manual_seed(41)
 np.random.seed(41)
@@ -176,7 +170,7 @@ def main(
         holdout,
         True,
         8,
-        len_epoch
+        len_epoch,
     )
     del train
     del holdout

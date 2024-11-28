@@ -8,12 +8,8 @@ import torch
 from torch.nn import functional as func
 from tqdm import tqdm
 
-from utils import (
-    calc_leave_one_out_full,
-    calc_leave_one_out_partial,
-    calc_metrics,
-    inf_loop,
-)
+from utils import (calc_leave_one_out_full, calc_leave_one_out_partial,
+                   calc_metrics, inf_loop)
 
 logger = logging.getLogger(__name__)
 

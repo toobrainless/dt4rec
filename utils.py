@@ -1,5 +1,6 @@
 import bisect
 import random
+from itertools import repeat
 from typing import List, Optional, Union
 
 import numpy as np
@@ -12,7 +13,6 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm, trange
-from itertools import repeat
 
 from metrics import Evaluator
 
