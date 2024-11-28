@@ -9,8 +9,14 @@ from torch.utils.data import DataLoader
 
 from gpt1 import GPT, GPTConfig
 from trainer import Trainer, TrainerConfig
-from utils import (LeaveOneOutDataset, SeqsDataset, calc_successive_metrics,
-                   data_to_sequences, get_all_seqs, set_seed)
+from utils import (
+    LeaveOneOutDataset,
+    SeqsDataset,
+    calc_successive_metrics,
+    data_to_sequences,
+    get_all_seqs,
+    set_seed,
+)
 
 set_seed(41)
 
@@ -31,7 +37,9 @@ def read_and_rename(path, use_csv=False):
     )
 
 
-def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
+def get_ds(
+    ds_name, trajectory_len, validate_batch_size, train_batch_size, return_train
+):
     assert ds_name in ["movielens", "zvuk_danil", "zvuk_my_split"]
     data_folder = Path(f"data_split/{ds_name}")
 
@@ -57,21 +65,26 @@ def get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size):
         pin_memory=True,
     )
     # create train_dataloader
-    if (data_folder / "all_seqs.pt").exists():
-        print("all_seqs exists...")
-        all_seqs = torch.load(data_folder / "all_seqs.pt")
-    else:
-        print("getting all_seqs...")
-        all_seqs = get_all_seqs(train, trajectory_len, train.item_idx.max() + 1, None)
-        torch.save(all_seqs, data_folder / "all_seqs.pt")
+    if return_train:
+        if (data_folder / "all_seqs.pt").exists():
+            print("all_seqs exists...")
+            all_seqs = torch.load(data_folder / "all_seqs.pt")
+        else:
+            print("getting all_seqs...")
+            all_seqs = get_all_seqs(
+                train, trajectory_len, train.item_idx.max() + 1, None
+            )
+            torch.save(all_seqs, data_folder / "all_seqs.pt")
 
-    train_dataloader = DataLoader(
-        SeqsDataset(all_seqs, memory_size=3, item_num=item_num),
-        batch_size=train_batch_size,
-        shuffle=True,
-        pin_memory=True,
-        num_workers=4,
-    )
+        train_dataloader = DataLoader(
+            SeqsDataset(all_seqs, memory_size=3, item_num=item_num),
+            batch_size=train_batch_size,
+            shuffle=True,
+            pin_memory=True,
+            num_workers=4,
+        )
+    else:
+        train_dataloader = None
 
     return (
         train,
@@ -115,7 +128,7 @@ def main(
         train_dataloader,
         item_num,
         user_num,
-    ) = get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size)
+    ) = get_ds(ds_name, trajectory_len, validate_batch_size, train_batch_size, True)
 
     print(f"{len_epoch / len(train_dataloader)=}")
 
