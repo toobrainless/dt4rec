@@ -13,6 +13,7 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm, trange
+from utils_sasrec import model_evaluate
 
 from metrics import Evaluator
 
@@ -231,6 +232,19 @@ class LeaveOneOutDataset:
 
 
 def calc_metrics(logits, train, test):
+    holdout_desc = {
+        "users": "user_idx",
+        "items": "item_idx",
+        "order": "timestamp",
+        "n_users": train.user_idx.nunique(),
+        "n_items": train.item_idx.max(),
+    }
+    return model_evaluate(
+        logits.argsort(axis=1)[:, ::-1],
+        test,
+        holdout_desc,
+        topn_list=[10],
+    )
     evaluator = Evaluator(top_k=[10])
     # scores_downvoted = evaluator.downvote_seen_items(
     #     logits,
@@ -491,14 +505,14 @@ def calc_successive_metrics(model, test_sequences, data_description_temp, device
     return {"hr": hr, "mrr": mrr, "ndcg": ndcg, "cov": cov}
 
 
-def calc_leave_one_out(
-    model, validate_dataloader, train_df, test_df
-):
+def calc_leave_one_out(model, validate_dataloader, train_df, test_df):
     model.eval()
     item_num = model.config.vocab_size - 1
     logits = np.zeros((len(test_df), item_num))
 
-    for idx, batch in tqdm(enumerate(validate_dataloader), total=len(validate_dataloader)):
+    for idx, batch in tqdm(
+        enumerate(validate_dataloader), total=len(validate_dataloader)
+    ):
         with torch.no_grad():
             batch = {key: value.to("cuda") for key, value in batch.items()}
             output = model(**batch)[:, -1, :-1].detach().cpu().numpy()
