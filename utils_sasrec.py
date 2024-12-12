@@ -61,9 +61,7 @@ def calculate_topn_metrics(
     return {"hr": hr, "mrr": mrr, "ndcg": ndcg, "cov": cov}
 
 
-def model_evaluate(
-    recommended_items, holdout, holdout_description, topn_list=(10)
-):
+def model_evaluate(recommended_items, holdout, holdout_description, topn_list=(10)):
     n_items = holdout_description["n_items"]
     itemid = holdout_description["items"]
     holdout_items = holdout.sort_values(["user_idx"])[itemid].values

@@ -1,9 +1,9 @@
-from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
+import pickle
+
 import torch
 from torch.nn import functional as F
-import pickle
-from torch.utils.data import default_collate
+from torch.utils.data import DataLoader, Dataset, default_collate
+from tqdm import tqdm
 
 DEVICE = torch.device("cuda")
 
@@ -97,6 +97,7 @@ def score_batch(model, seqs):
 
     return torch.concat(outputs, dim=0)
 
+
 def my_collate(batch):
     output = {key: [] for key in batch[0].keys()}
     for elem in batch:
@@ -105,7 +106,6 @@ def my_collate(batch):
     for key, value in output.items():
         output[key] = torch.stack(value)
     return output
-
 
 
 def score_batch2(model, seqs):

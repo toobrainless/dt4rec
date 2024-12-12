@@ -1,9 +1,9 @@
 import click
 import numpy as np
 import torch
+
 from train import get_ds
 from utils import calc_leave_one_out
-
 
 torch.manual_seed(41)
 np.random.seed(41)

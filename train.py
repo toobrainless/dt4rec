@@ -9,14 +9,8 @@ from torch.utils.data import DataLoader
 
 from gpt1 import GPT, GPTConfig
 from trainer import Trainer, TrainerConfig
-from utils import (
-    LeaveOneOutDataset,
-    SeqsDataset,
-    calc_successive_metrics,
-    data_to_sequences,
-    get_all_seqs,
-    set_seed,
-)
+from utils import (LeaveOneOutDataset, SeqsDataset, calc_successive_metrics,
+                   data_to_sequences, get_all_seqs, set_seed)
 
 set_seed(41)
 

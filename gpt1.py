@@ -7,9 +7,18 @@ from torch.nn import functional as F
 
 logger = logging.getLogger(__name__)
 
+
 # Efficient implementation equivalent to the following:
-def scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.0,
-        is_causal=False, scale=None, enable_gqa=False) -> torch.Tensor:
+def scaled_dot_product_attention(
+    query,
+    key,
+    value,
+    attn_mask=None,
+    dropout_p=0.0,
+    is_causal=False,
+    scale=None,
+    enable_gqa=False,
+) -> torch.Tensor:
     DEVICE = query.device
 
     L, S = query.size(-2), key.size(-2)
@@ -28,8 +37,8 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.
             attn_bias += attn_mask
 
     if enable_gqa:
-        key = key.repeat_interleave(query.size(-3)//key.size(-3), -3)
-        value = value.repeat_interleave(query.size(-3)//value.size(-3), -3)
+        key = key.repeat_interleave(query.size(-3) // key.size(-3), -3)
+        value = value.repeat_interleave(query.size(-3) // value.size(-3), -3)
 
     attn_weight = query @ key.transpose(-2, -1) * scale_factor
 
