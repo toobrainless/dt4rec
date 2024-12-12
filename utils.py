@@ -306,71 +306,6 @@ def get_dataset(seq_len, drop_bad_ratings=False):
     return train, test, validate_dataloader, item_num, user_num
 
 
-def calc_diff(train, test):
-    train_users = set(train.user_idx)
-    test_users = set(test.user_idx)
-
-    train_diff_test = train_users.difference(test_users)
-    test_diff_train = test_users.difference(train_users)
-
-    return train_diff_test, test_diff_train
-
-
-def fill_bad_users(train, test):
-    train_diff_test, test_diff_train = calc_diff(train, test)
-
-    for bad_user in train_diff_test:
-        test.loc[len(test)] = [bad_user, 1113, 5, 998315055]
-
-    for bad_user in test_diff_train:
-        train.loc[len(train)] = [bad_user, 1008, 5, 956715569]
-
-
-class SeqsDataset2(Dataset):
-    def __init__(self, seqs, item_num):
-        self.seqs = seqs
-        self.item_num = item_num
-
-    def __getitem__(self, idx):
-        return make_rsa(self.seqs[idx], 3, self.item_num, True)
-
-    def __len__(self):
-        return len(self.seqs)
-
-
-def seq_to_logits(model, seqs):
-    item_num = model.config.vocab_size
-    seqs_dataset = SeqsDataset2(seqs, item_num)
-    seqs_dataloader = DataLoader(seqs_dataset, batch_size=128, num_workers=4)
-
-    outputs = []
-    for batch in tqdm(seqs_dataloader, total=len(seqs_dataloader)):
-        outputs.append(model(**batch).detach()[:, -1])
-
-    return torch.concat(outputs, dim=0)
-
-
-def seq_to_states(model, seqs):
-    item_num = model.config.vocab_size
-    seqs_dataset = SeqsDataset2(seqs, item_num)
-    seqs_dataloader = DataLoader(seqs_dataset, batch_size=128, num_workers=4)
-
-    outputs = []
-    for batch in tqdm(seqs_dataloader, total=len(seqs_dataloader)):
-        trajectory_len = batch["states"].shape[1]
-        state_embeddings = model.state_repr(
-            batch["users"].repeat((1, trajectory_len)).reshape(-1, 1),
-            batch["states"].reshape(-1, 3),
-        )
-
-        state_embeddings = state_embeddings.reshape(
-            batch["states"].shape[0], batch["states"].shape[1], model.config.n_embd
-        )
-        outputs.append(state_embeddings[:, -1])
-
-    return torch.concat(outputs, dim=0)
-
-
 def data_to_sequences(data, data_description):
     userid = data_description["users"]
     itemid = data_description["items"]
@@ -381,20 +316,6 @@ def data_to_sequences(data, data_description):
         .apply(list)
     )
     return sequences
-
-
-def split_and_pad_tensor(tensor, pad_token, chunk_size=30):
-    n = tensor.size(0)
-    num_chunks = (n + chunk_size - 1) // chunk_size
-
-    padded_size = num_chunks * chunk_size
-
-    padded_tensor = torch.full((padded_size,), fill_value=pad_token)
-    padded_tensor[-n:] = tensor
-
-    chunks = padded_tensor.view(num_chunks, chunk_size)
-
-    return chunks
 
 
 def calc_successive_metrics(model, test_sequences, data_description_temp, device):
