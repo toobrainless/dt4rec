@@ -509,6 +509,8 @@ def calc_leave_one_out(model, validate_dataloader, train_df, test_df):
     model.eval()
     item_num = model.config.vocab_size - 1
     logits = np.zeros((len(test_df), item_num))
+    test_df = test_df.sort_values("user_idx")
+    metrics = []
 
     for idx, batch in tqdm(
         enumerate(validate_dataloader), total=len(validate_dataloader)
@@ -517,7 +519,13 @@ def calc_leave_one_out(model, validate_dataloader, train_df, test_df):
             batch = {key: value.to("cuda") for key, value in batch.items()}
             output = model(**batch)[:, -1, :-1].detach().cpu().numpy()
         batch_size = output.shape[0]
-        logits[idx * batch_size : (idx + 1) * batch_size] = output
+        metrics.append(calc_metrics(output, train_df, test_df.iloc[idx * batch_size : (idx + 1) * batch_size]))
+        print(metrics[-1])
+        # logits[idx * batch_size : (idx + 1) * batch_size] = output
+    print(f"ndcg@10 = {np.mean([m['ndcg@10'] for m in metrics])}")
+    print(f"mrr@10 = {np.mean([m['mrr@10'] for m in metrics])}")
+    print(f"hr@10 = {np.mean([m['hr@10'] for m in metrics])}")
+
 
     metrics = calc_metrics(logits, train_df, test_df)
     model.train()

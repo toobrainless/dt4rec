@@ -40,7 +40,7 @@ def read_and_rename(path, use_csv=False):
 def get_ds(
     ds_name, trajectory_len, validate_batch_size, train_batch_size, return_train
 ):
-    assert ds_name in ["movielens", "zvuk_danil", "zvuk_my_split"]
+    assert ds_name in ["movielens", "zvuk_danil", "zvuk_my_split", "zvuk_danil_new"]
     data_folder = Path(f"data_split/{ds_name}")
 
     if ds_name == "movielens":
@@ -48,15 +48,19 @@ def get_ds(
         test = read_and_rename(data_folder / "testset.csv", use_csv=True)
         holdout = read_and_rename(data_folder / "holdout_valid_temp.csv", use_csv=True)
     if ds_name == "zvuk_danil":
-        train = read_and_rename("data_split/zvuk_danil/training_temp.parquet")
-        test = read_and_rename("data_split/zvuk_danil/testset.parquet")
-        holdout = read_and_rename("data_split/zvuk_danil/holdout_valid_temp.parquet")
+        train = read_and_rename(data_folder / "training_temp.parquet")
+        test = read_and_rename(data_folder / "testset.parquet")
+        holdout = read_and_rename(data_folder / "holdout_valid_temp.parquet")
+    if ds_name == "zvuk_danil_new":
+        train = read_and_rename(data_folder / "training_temp.parquet")
+        test = read_and_rename(data_folder / "testset_40k.parquet")
+        holdout = read_and_rename(data_folder / "holdout_40k.parquet")
 
     item_num = train.item_idx.max() + 1
     user_num = train.user_idx.max() + 1
 
     # create validate_datalaoder
-    validate_dataset = LeaveOneOutDataset(train, holdout, trajectory_len)
+    validate_dataset = LeaveOneOutDataset(test, holdout, trajectory_len)
     validate_dataloader = DataLoader(
         validate_dataset,
         batch_size=validate_batch_size,
