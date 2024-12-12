@@ -1,3 +1,8 @@
+"""
+This script is used for dataset preparation, including preprocessing, splitting the dataset into subsets, 
+and saving the resulting train and test sets. It also generates sequential data suitable for model training.
+"""
+
 import pandas as pd
 import torch
 

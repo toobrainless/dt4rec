@@ -4,7 +4,7 @@ from typing import List, Union
 import numpy as np
 import pandas as pd
 
-# from recommenders.evaluation import python_evaluation
+from recommenders.evaluation import python_evaluation
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 

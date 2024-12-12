@@ -8,7 +8,6 @@ from torch.nn import functional as F
 logger = logging.getLogger(__name__)
 
 
-# Efficient implementation equivalent to the following:
 def scaled_dot_product_attention(
     query,
     key,
@@ -19,6 +18,9 @@ def scaled_dot_product_attention(
     scale=None,
     enable_gqa=False,
 ) -> torch.Tensor:
+    """
+    Compute the scaled dot-product attention. Supports optional causal masking, dropout, and generalized query attention.
+    """
     DEVICE = query.device
 
     L, S = query.size(-2), key.size(-2)
@@ -49,7 +51,9 @@ def scaled_dot_product_attention(
 
 
 class GPTConfig:
-    """base GPT config, params common to all GPT versions"""
+    """
+    Configuration class for the GPT model, storing hyperparameters and providing utility functions for parameter updates.
+    """
 
     embd_pdrop = 0.1
     resid_pdrop = 0.1
@@ -67,7 +71,7 @@ class GPTConfig:
 
     def update(self, **kwargs):
         """
-        Arguments setter
+        Update the GPT configuration with new parameter values.
         """
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -83,6 +87,9 @@ class CausalSelfAttention(nn.Module):
         is_causal: bool = False,
         dropout: float = 0.0,
     ):
+        """
+        Initialize the Causal Self-Attention module with the specified number of heads, embedding dimensions, and dropout rates.
+        """
         super().__init__()
         assert embed_dimension % num_heads == 0
         # key, query, value projections for all heads, but in a batch
@@ -98,6 +105,9 @@ class CausalSelfAttention(nn.Module):
         self.is_causal = is_causal
 
     def forward(self, x):
+        """
+        Perform the forward pass for self-attention, including query, key, and value computation and optional causal masking.
+        """
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         query_projected = self.c_attn(x)
 
@@ -134,6 +144,9 @@ class Block(nn.Module):
     """an unassuming Transformer block"""
 
     def __init__(self, config):
+        """
+        Initialize a Transformer block, including layer normalization, self-attention, and a feed-forward network.
+        """
         super().__init__()
         self.ln1 = nn.LayerNorm(config.n_embd)
         self.ln2 = nn.LayerNorm(config.n_embd)
@@ -154,7 +167,7 @@ class Block(nn.Module):
 
     def forward(self, x):
         """
-        :x: batch
+        Perform the forward pass through the Transformer block, applying self-attention and feed-forward layers.
         """
         x = x + self.attn(self.ln1(x))
         x = x + self.mlp(self.ln2(x))
@@ -194,7 +207,9 @@ class StateReprModule(nn.Module):
         self.initialize()
 
     def initialize(self):
-        """weight init"""
+        """
+        Initialize the weights for all embeddings and layers in the module.
+        """
         nn.init.normal_(self.user_embeddings.weight, std=0.01)
         self.item_embeddings.weight.data[-1].zero_()
 
@@ -205,9 +220,7 @@ class StateReprModule(nn.Module):
 
     def forward(self, user, memory):
         """
-        :param user: user batch
-        :param memory: memory batch
-        :return: vector of dimension embedding_dim
+        Compute the state representation given user and memory inputs.
         """
         user_embedding = self.user_embeddings(user.long()).squeeze(1)
         item_embeddings = self.item_embeddings(memory.long())
@@ -219,7 +232,9 @@ class StateReprModule(nn.Module):
 
 
 class GPT(nn.Module):
-    """the full GPT language model, with a context size of block_size"""
+    """
+    Full GPT model. Includes embedding layers, Transformer blocks, and a decoding head.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -272,6 +287,9 @@ class GPT(nn.Module):
 
     @staticmethod
     def _init_weights(module):
+        """
+        Initialize model weights, ensuring proper random initialization for layers and embeddings.
+        """
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=0.02)
             if isinstance(module, nn.Linear) and module.bias is not None:
@@ -348,11 +366,7 @@ class GPT(nn.Module):
         users,
     ):
         """
-        :states: states batch, (batch, trajectory_len, 3)
-        :actions: actions batch, (batch, trajectory_len, 1)
-        :rtgs: rtgs batch, (batch, trajectory_len, 1)
-        :timesteps: timesteps batch, (batch, 1, 1)
-        :users:users batch,  (batch, 1)
+        Compute the hidden states of the model given inputs, including states, actions, returns-to-go (RTGs), timesteps, and user embeddings.
         """
 
         inference = not self.training
@@ -430,6 +444,9 @@ class GPT(nn.Module):
         timesteps,
         users,
     ):
+        """
+        Perform the forward pass of the GPT model, returning logits for the input sequence.
+        """
         x = self.calc_hidden_state(states, actions, rtgs, timesteps, users)
         logits = self.head(x)
 
@@ -437,11 +454,7 @@ class GPT(nn.Module):
 
     def predict(self, states, actions, rtgs, timesteps, users):
         """
-        :states: states batch, (batch, block_size, 3)
-        :actions: actions batch, (batch, block_size, 1)
-        :rtgs: rtgs batch, (batch, block_size, 1)
-        :timesteps: timesteps batch, (batch, 1, 1)
-        :users:users batch,  (batch, 1)
+        Generate predictions for the next actions given the current states, actions, RTGs, timesteps, and user embeddings.
         """
         logits, _ = self(
             states=states.to(self.pos_emb.device),

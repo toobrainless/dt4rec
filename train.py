@@ -1,3 +1,21 @@
+"""
+This script trains a GPT-based model for a specified dataset and experiment configuration. 
+It prepares the dataset, initializes the model, trains it, and optionally calculates metrics.
+
+Parameters:
+- exp_name (str): Name of the experiment; used for saving results and checkpoints.
+- ds_name (str): Name of the dataset to use for training and validation.
+- --train_batch_size, -tbs (int, default=128): Batch size for training.
+- --validate_batch_size, -vbs (int, default=128): Batch size for validation.
+- --use_svd (bool, default=False): Whether to initialize item embeddings with precomputed SVD embeddings.
+- --learn_svd (bool, default=False): Whether to allow fine-tuning of SVD-based item embeddings.
+- --trajectory_len, -tl (int, default=100): Length of trajectories for training sequences.
+- --calc_successive, -cs (bool, default=False): Whether to calculate successive metrics after training.
+- --len_epoch, -le (int, default=1000): Number of batches per epoch.
+- --num_epoch, -ne (int, default=10): Number of training epochs.
+- --checkpoints, -c (bool, default=False): Whether to save model checkpoints after each epoch.
+"""
+
 import json
 from pathlib import Path
 

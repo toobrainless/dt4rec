@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.nn import functional as func
+from torch.nn import functional as F
 from tqdm import tqdm
 
 from utils import calc_leave_one_out, inf_loop
@@ -26,7 +26,7 @@ class TrainerConfig:
 
     def update(self, **kwargs):
         """
-        Arguments setter
+        Update the trainer configuration with the provided arguments.
         """
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -52,6 +52,13 @@ class Trainer:
         use_cuda=True,
         len_epoch=None,
     ):
+        """
+        Initialize the Trainer class with the model, data loaders, training configuration, and other parameters.
+        Validation metrics are computed only if `validate_dataloader` is provided, 
+        and they require `train_df` and `test_df` for evaluation.
+
+        bool: checkpoints specifies whether to save checkpoints after each epoch. 
+        """
         self.exp_name = exp_name
         self.checkpoints = checkpoints
         if self.checkpoints:
@@ -76,9 +83,15 @@ class Trainer:
             self.model = self.model.to("cuda")
 
     def _move_batch(self, batch):
+        """
+        Move the given batch of data to the appropriate device (CPU or GPU).
+        """
         return [elem.to(self.device) for elem in batch]
 
     def _train_epoch(self, epoch):
+        """
+        Run one training epoch, including data loading, forward pass, loss computation, and optimization.
+        """
         self.model.train()
 
         losses = []
@@ -105,7 +118,7 @@ class Trainer:
             # forward the model
             logits = self.model(states, actions, rtgs, timesteps, users)
 
-            loss = func.cross_entropy(
+            loss = F.cross_entropy(
                 logits.reshape(-1, logits.size(-1)), targets.reshape(-1)
             ).mean()
             losses.append(loss.item())
@@ -124,6 +137,9 @@ class Trainer:
         return np.mean(losses)
 
     def _evalutation_epoch(self):
+        """
+        Evaluate the model's performance on the validation dataset and compute metrics.
+        """
         metrics = calc_leave_one_out(
             self.model,
             self.validate_dataloader,
@@ -135,7 +151,7 @@ class Trainer:
 
     def train(self):
         """
-        Run training loop
+        Run the full training loop for the specified number of epochs, including optional validation and model checkpoints.
         """
         for epoch in range(self.epochs):
             start = time.time()

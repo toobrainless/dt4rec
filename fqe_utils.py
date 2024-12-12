@@ -1,19 +1,29 @@
-import pickle
+"""
+This module provides a set of functions and utilities for computing FQE (Finite-Horizon Q Evaluation).
+It includes tools for data preparation, state embedding calculation, and scoring.
+"""
 
 import torch
 from torch.nn import functional as F
-from torch.utils.data import DataLoader, Dataset, default_collate
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 DEVICE = torch.device("cuda")
 
 
 def batch_to_device(batch):
+    """
+    Move the batch of tensors to the specified device (e.g., GPU).
+    """
     new_batch = {key: value.to(DEVICE) for key, value in batch.items()}
     return new_batch
 
 
 def make_rsa(item_seq, memory_size, item_num, inference=False):
+    """
+    Create a dictionary of Reinforcement Learning (RL)-specific tensors (states, actions, rewards, etc.)
+    based on the input sequence. Supports both inference and training modes.
+    """
     if inference:
         return {
             "rtgs": torch.arange(len(item_seq) + 1, 0, -1)[..., None],
@@ -34,21 +44,34 @@ def make_rsa(item_seq, memory_size, item_num, inference=False):
 
 
 class SeqsDataset(Dataset):
+
     def __init__(self, seqs, item_num):
+        """
+        Initialize the dataset with a list of sequences and the total number of items.
+        """
         self.seqs = seqs
         self.item_num = item_num
 
     def __getitem__(self, idx):
+        """
+        Retrieve a single sequence and convert it into RL-specific tensors (e.g., states, actions, rewards).
+        """
         seq = self.seqs[idx]
         if len(seq) == 0:
             seq = torch.tensor([self.item_num, self.item_num, self.item_num])
         return make_rsa(self.seqs[idx], 3, self.item_num, True)
 
     def __len__(self):
+        """
+        Return the number of sequences in the dataset.
+        """
         return len(self.seqs)
 
 
 def seq_to_states(model, seqs):
+    """
+    Convert a list of sequences into a batch of state embeddings using the model's state representation function.
+    """
     item_num = model.config.vocab_size
     seqs_dataset = SeqsDataset(seqs, item_num)
     seqs_dataloader = DataLoader(seqs_dataset, batch_size=128, num_workers=4)
@@ -72,6 +95,9 @@ def seq_to_states(model, seqs):
 
 
 def score_with_state(model, seq):
+    """
+    Compute the state embedding for a single input sequence and return it.
+    """
     model.eval()
     item_num = model.config.vocab_size
     seq_len = 100
@@ -84,6 +110,9 @@ def score_with_state(model, seq):
 
 
 def score_batch(model, seqs):
+    """
+    Compute model scores (logits) for a batch of sequences, using a DataLoader for efficiency.
+    """
     model.eval()
     item_num = model.config.vocab_size
     seqs_dataset = SeqsDataset(seqs, item_num)
@@ -99,6 +128,9 @@ def score_batch(model, seqs):
 
 
 def my_collate(batch):
+    """
+    Custom collate function for batching list of dicts into a single batch.
+    """
     output = {key: [] for key in batch[0].keys()}
     for elem in batch:
         for key, value in elem.items():
@@ -109,6 +141,9 @@ def my_collate(batch):
 
 
 def score_batch2(model, seqs):
+    """
+    Compute model scores (logits) for a batch of sequences using a manual batching approach.
+    """
     model.eval()
     item_num = model.config.vocab_size
     batch = my_collate([make_rsa(seq, 3, item_num, True) for seq in seqs])
@@ -119,6 +154,9 @@ def score_batch2(model, seqs):
 
 
 def state_batch2(model, seqs):
+    """
+    Compute state embeddings for a batch of sequences using a manual batching approach.
+    """
     item_num = model.config.vocab_size
     batch = my_collate([make_rsa(seq, 3, item_num, True) for seq in seqs])
     batch = batch_to_device(batch)
@@ -129,6 +167,9 @@ def state_batch2(model, seqs):
 
 
 def state_batch(model, seqs, use_tqdm=False):
+    """
+    Compute state embeddings for a batch of sequences, optionally using a progress bar (via tqdm).
+    """
     item_num = model.config.vocab_size
     seqs_dataset = SeqsDataset(seqs, item_num)
     seqs_dataloader = DataLoader(seqs_dataset, batch_size=128, num_workers=4)

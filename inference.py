@@ -1,3 +1,8 @@
+"""
+This script calculates leave-one-out evaluation metrics for a given model and dataset. 
+It loads the specified model and dataset, performs evaluation, and outputs the computed metrics.
+"""
+
 import click
 import numpy as np
 import torch

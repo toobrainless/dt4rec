@@ -3,6 +3,9 @@ import pandas as pd
 
 
 def transform_indices(data, users, items):
+    """
+    Transform user and item identifiers in the dataset to numeric indices, returning the updated dataset and mapping dictionaries.
+    """
     data_index = {}
     for entity, field in zip(["users", "items"], [users, items]):
         idx, idx_map = to_numeric_id(data, field)
@@ -12,6 +15,9 @@ def transform_indices(data, users, items):
 
 
 def to_numeric_id(data, field):
+    """
+    Convert a specific field in the dataset to numeric indices, returning the indices and the mapping.
+    """
     idx_data = data[field].astype("category")
     idx = idx_data.cat.codes
     idx_map = idx_data.cat.categories.rename(field)
@@ -19,16 +25,25 @@ def to_numeric_id(data, field):
 
 
 def topidx(a, topn):
+    """
+    Find the indices of the top `topn` values in an array.
+    """
     parted = np.argpartition(a, -topn)[-topn:]
     return parted[np.argsort(-a[parted])]
 
 
 def topn_recommendations(scores, topn=10):
+    """
+    Generate top-N recommendations for each row in a score matrix.
+    """
     recommendations = np.apply_along_axis(topidx, 1, scores, topn)
     return recommendations
 
 
 def downvote_seen_items(scores, data, data_description):
+    """
+    Modify the score matrix by assigning a low score (`-inf`) to items already seen by each user.
+    """
     userid = data_description["users"]
     itemid = data_description["items"]
     # get indices of observed data
@@ -43,6 +58,9 @@ def downvote_seen_items(scores, data, data_description):
 def calculate_topn_metrics(
     recommended_items, holdout_items, n_items, n_test_users, topn
 ):
+    """
+    Compute top-N metrics (HR, MRR, NDCG, and Coverage) for recommendations against holdout data.
+    """
     hits_mask = recommended_items[:, :topn] == holdout_items.reshape(-1, 1)
 
     # HR calculation
@@ -62,6 +80,9 @@ def calculate_topn_metrics(
 
 
 def model_evaluate(recommended_items, holdout, holdout_description, topn_list=(10)):
+    """
+    Evaluate the model's performance using top-N metrics over a set of recommended items and holdout data.
+    """
     n_items = holdout_description["n_items"]
     itemid = holdout_description["items"]
     holdout_items = holdout.sort_values(["user_idx"])[itemid].values

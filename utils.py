@@ -20,7 +20,7 @@ from utils_sasrec import model_evaluate
 
 def set_seed(seed):
     """
-    Set random seed in all dependicies
+    Set the random seed for all dependencies to ensure reproducibility.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -30,7 +30,7 @@ def set_seed(seed):
 
 class WarmUpScheduler(_LRScheduler):
     """
-    Implementation of WarmUp
+    A learning rate scheduler that implements a warm-up phase to gradually increase the learning rate at the start of training.
     """
 
     def __init__(
@@ -48,13 +48,16 @@ class WarmUpScheduler(_LRScheduler):
         super().__init__(optimizer, last_epoch, verbose)
 
     def get_lr(self) -> float:
+        """
+        Calculate the current learning rate based on the warm-up schedule.
+        """
         lr = calc_lr(self._step_count, self.dim_embed, self.warmup_steps)
         return [lr] * self.num_param_groups
 
 
 def calc_lr(step, dim_embed, warmup_steps):
     """
-    Learning rate calculation
+    Calculate the learning rate based on the number of steps, embedding dimension, and warm-up steps.
     """
     return dim_embed ** (-0.5) * min(step ** (-0.5), step * warmup_steps ** (-1.5))
 
@@ -68,6 +71,9 @@ def time_split(
     item_col,
     user_col,
 ):
+    """
+    Split a dataset into training and testing sets based on a timestamp column, with options to drop cold items and users.
+    """
     df = df.sort_values(timestamp_col)
     train_len = int(len(df) * train_size)
     train = df.iloc[:train_len]
@@ -83,6 +89,9 @@ def time_split(
 
 
 def split_last_n(_df, user_col, item_col, n=1, drop_cold=True):
+    """
+    Split a dataset into training and testing sets by reserving the last `n` interactions for each user.
+    """
     df = _df.copy()
     df = df.sort_values([user_col, "timestamp"])
     df["row_num"] = df.groupby(user_col).cumcount() + 1
@@ -101,24 +110,36 @@ def split_last_n(_df, user_col, item_col, n=1, drop_cold=True):
 
 class MyIndexer:
     def __init__(self, user_col, item_col):
+        """
+        Initialize an encoder for transforming user and item columns into numeric indices.
+        """
         self.user_col = user_col
         self.item_col = item_col
         self.user_encoder = LabelEncoder()
         self.item_encoder = LabelEncoder()
 
     def fit(self, X):
+        """
+        Fit the encoder on the user and item columns of the dataset.
+        """
         self.user_encoder.fit(X[self.user_col])
         self.item_encoder.fit(X[self.item_col])
 
         return self
 
     def transform(self, X):
+        """
+        Transform user and item columns in the dataset into numeric indices using the fitted encoder.
+        """
         X[self.user_col] = self.user_encoder.transform(X[self.user_col])
         X[self.item_col] = self.item_encoder.transform(X[self.item_col])
 
         return X
 
     def fit_transform(self, X):
+        """
+        Fit the encoder and transform the dataset in a single step, ensuring the consistency of item and user indices.
+        """
         old_len_items = len(set(X[self.item_col]))
         old_len_users = len(set(X[self.user_col]))
         ans = self.fit(X).transform(X)
@@ -135,25 +156,35 @@ class MyIndexer:
         return ans
 
 
-# dataset stuff
-
-
 class SeqsDataset(Dataset):
     def __init__(self, seqs, memory_size, item_num):
+        """
+        Initialize a dataset of sequences with a specified memory size and number of items.
+        """
         self.memory_size = memory_size
         self.seqs = seqs
         self.item_num = item_num
 
     def __getitem__(self, idx):
+        """
+        Retrieve a sequence and convert it into Reinforcement Learning (RL)-specific tensors.
+
+        """
         return make_rsa(
             self.seqs[idx], memory_size=self.memory_size, item_num=self.item_num
         )
 
     def __len__(self):
+        """
+        Return the number of sequences in the dataset.
+        """
         return len(self.seqs)
 
 
 def make_rsa(item_seq, memory_size, item_num, inference=False):
+    """
+    Generate RL-specific tensors (states, actions, rewards, etc.) from a sequence of items.
+    """
     if inference:
         return {
             "rtgs": torch.arange(len(item_seq) + 1, 0, -1)[..., None],
@@ -174,6 +205,9 @@ def make_rsa(item_seq, memory_size, item_num, inference=False):
 
 
 def get_all_seqs(df, seq_len, pad_value, user_num):
+    """
+    Convert a DataFrame into padded sequences of fixed length for all users.
+    """
     df = df.sort_values(["user_idx", "timestamp"])
     count_df = df.groupby("user_idx").count()
     residuals_dict = ((seq_len - count_df["item_idx"]) % seq_len).to_dict()
@@ -198,13 +232,18 @@ def get_all_seqs(df, seq_len, pad_value, user_num):
 
 
 def inf_loop(data_loader):
-    """wrapper function for endless data loader."""
+    """
+    Create an endless loop over a data loader for continuous data feeding.
+    """
     for loader in repeat(data_loader):
         yield from loader
 
 
 class LeaveOneOutDataset:
     def __init__(self, train, holdout, seq_len):
+        """
+        Initialize a dataset for leave-one-out evaluation by preparing user-specific sequences and holdout items.
+        """
         self.holdout = holdout
         self.users_map = np.array(sorted(holdout.user_idx.unique()))
         self.seq_len = seq_len
@@ -217,6 +256,9 @@ class LeaveOneOutDataset:
         self.item_num = train.item_idx.max() + 1
 
     def __getitem__(self, idx):
+        """
+        Retrieve a sequence for a specific user, including the most recent items for evaluation.
+        """
         user = self.users_map[idx]
         items = torch.from_numpy(
             self.last_df[self.last_df.user_idx == user].item_idx.to_numpy()
@@ -228,10 +270,16 @@ class LeaveOneOutDataset:
         return rsa
 
     def __len__(self):
+        """
+        Return the number of users in the dataset.
+        """
         return len(self.users_map)
 
 
 def calc_metrics(logits, train, test):
+    """
+    Compute evaluation metrics (HR, MRR, NDCG, Coverage) for predictions compared to the test set.
+    """
     holdout_desc = {
         "users": "user_idx",
         "items": "item_idx",
@@ -307,6 +355,9 @@ def get_dataset(seq_len, drop_bad_ratings=False):
 
 
 def data_to_sequences(data, data_description):
+    """
+    Convert raw interaction data into user-specific sequences sorted by time.
+    """
     userid = data_description["users"]
     itemid = data_description["items"]
 
@@ -319,6 +370,9 @@ def data_to_sequences(data, data_description):
 
 
 def calc_successive_metrics(model, test_sequences, data_description_temp, device):
+    """
+    Evaluate a model's performance on successive predictions, calculating HR, MRR, NDCG, and Coverage.
+    """
     def predict_sequential(model, target_seq, seen_seq):  # example for SASRec
         pad_token = model.state_repr.item_embeddings.padding_idx
         item_num = pad_token
@@ -427,6 +481,9 @@ def calc_successive_metrics(model, test_sequences, data_description_temp, device
 
 
 def calc_leave_one_out(model, validate_dataloader, train_df, test_df):
+    """
+    Perform leave-one-out evaluation for a model, calculating metrics and displaying intermediate results.
+    """
     model.eval()
     item_num = model.config.vocab_size - 1
     logits = np.zeros((len(test_df), item_num))
