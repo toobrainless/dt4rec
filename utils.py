@@ -316,6 +316,9 @@ def calc_metrics(logits, train, test):
 
 
 def get_dataset(seq_len, drop_bad_ratings=False):
+    """
+    Load and prepare the MovieLens dataset for training and validation. This includes filtering ratings (if specified), splitting into training and testing sets, and creating a validation DataLoader for leave-one-out evaluation.
+    """
     df = MovieLens("1m").ratings.rename(
         columns={
             "user_id": "user_idx",
